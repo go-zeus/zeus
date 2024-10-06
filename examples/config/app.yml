@@ -1,0 +1,24 @@
+name: demo
+registry:
+  zk:
+    host: test.zk.dd
+    path: /micro
+services:
+  demo-service:
+    name: demo-service
+    registry: zk
+servers:
+  default:
+    services: ["demo-service"]
+    ip: 0.0.0.0
+    port: 8080
+clients:
+  demo1-service:
+    name: demo1-service
+  demo2-service:
+    name: demo2-service
+handlers:
+  debug:
+    path: /debug
+    handler: debug
+
