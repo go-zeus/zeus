@@ -5,6 +5,7 @@ import (
 	"github.com/go-zeus/zeus/log"
 	"github.com/go-zeus/zeus/registry/memory"
 	"github.com/go-zeus/zeus/types"
+	"io"
 	"net/http"
 )
 
@@ -21,7 +22,10 @@ func main() {
 	demoClient := client.NewClient(serviceName, client.Discovery(dis))
 	r, _ := http.NewRequest("GET", "http://demo/", nil)
 	res, err := demoClient.Do(r)
-	body := make([]byte, res.ContentLength)
-	_, _ = res.Body.Read(body)
-	log.Info("%s err %v", body, err)
+	if err != nil {
+		log.Error("client do error:%v", err)
+		return
+	}
+	data, err := io.ReadAll(res.Body)
+	log.Info("%s err %v", data, err)
 }
