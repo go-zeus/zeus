@@ -7,8 +7,7 @@ type Fake struct {
 }
 
 func NewFake() Instance {
-	return &Fake{BaseInstance{
-		cond:  sync.NewCond(&sync.Mutex{}),
-		ready: false,
-	}}
+	b := &Fake{}
+	b.cond = sync.NewCond(&b.mu)
+	return b
 }

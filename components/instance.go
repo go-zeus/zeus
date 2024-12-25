@@ -5,30 +5,16 @@ import (
 	"sync"
 )
 
-var ins = &instances{data: map[string]Instance{}}
+var ins = &instances{data: make(map[string]Instance)}
 
 type Instance interface {
 	InstanceState
 }
 
 type InstanceState interface {
+	SetReady()
 	IsReady() bool
 	Wait()
-}
-
-type BaseInstance struct {
-	cond  *sync.Cond
-	ready bool
-}
-
-func (b *BaseInstance) IsReady() bool {
-	return b.ready
-}
-
-func (b *BaseInstance) Wait() {
-	for !b.ready {
-		b.cond.Wait()
-	}
 }
 
 type instances struct {
@@ -49,27 +35,41 @@ func SetInstance(id string, instance Instance) error {
 	return nil
 }
 
-func GetInstance[T Instance](id string) T {
+func GetInstance[T Instance](id string) (T, error) {
+	var zero T
 	ins.mu.RLock()
 	defer ins.mu.RUnlock()
-	return ins.data[id].(T)
+	instance, exists := ins.data[id]
+	if !exists {
+		return zero, errors.New("实例不存在")
+	}
+	return instance.(T), nil
 }
 
-func GetWaitInstance(id string) Instance {
+func GetWaitInstance(id string) (Instance, error) {
 	ins.mu.RLock()
-	defer ins.mu.RUnlock()
-	in := ins.data[id]
-	in.Wait()
-	return in
+	instance, exists := ins.data[id]
+	ins.mu.RUnlock()
+
+	if !exists {
+		return nil, errors.New("实例不存在")
+	}
+
+	// 调用实例自身的 Wait 方法，确保在持有实例自己的锁的情况下进行等待。
+	instance.Wait()
+
+	return instance, nil
 }
 
-func DelInstance(kind string) {
+func DelInstance(id string) {
 	ins.mu.Lock()
 	defer ins.mu.Unlock()
-	delete(ins.data, kind)
+	delete(ins.data, id)
 }
 
 func IsReady() bool {
+	ins.mu.RLock()
+	defer ins.mu.RUnlock()
 	for _, i := range ins.data {
 		if !i.IsReady() {
 			return false

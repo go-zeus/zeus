@@ -3,14 +3,21 @@ package components
 import (
 	"github.com/go-zeus/zeus/log"
 	"testing"
+	"time"
 )
 
 func TestGetWaitInstance(t *testing.T) {
 	id := "fake"
-	err := SetInstance(id, NewFake())
+	fake := NewFake()
+	err := SetInstance(id, fake)
 	if err != nil {
 		return
 	}
-	fake := GetWaitInstance(id)
-	log.Info("%v", fake)
+	go func() {
+		fake, err := GetWaitInstance(id)
+		log.Info("%v err:%v", fake.IsReady(), err)
+	}()
+	time.Sleep(3 * time.Second)
+	fake.SetReady()
+	time.Sleep(time.Second)
 }
