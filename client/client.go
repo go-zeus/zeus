@@ -54,12 +54,15 @@ func (c *client) load() {
 	}
 }
 
-func (c *client) Do(r *http.Request) (*http.Response, error) {
-	color := r.Header.Get("X-color")
+func (c *client) Do(r *http.Request) (res *http.Response, err error) {
+	color := r.Header.Get(XZeusColor)
 	if color == "" {
 		color = "default"
 	}
 	ins, _ := c.clusters[color].Next()
-	r.URL, _ = url.Parse(fmt.Sprintf("%s://%s:%d", r.URL.Scheme, ins.Ip, ins.Port))
+	r.URL, err = url.Parse(fmt.Sprintf("%s://%s:%d", r.URL.Scheme, ins.Ip, ins.Port))
+	if err != nil {
+		return nil, err
+	}
 	return c.cc.Do(r)
 }
