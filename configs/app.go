@@ -1,22 +1,12 @@
 package configs
 
+import (
+	"github.com/go-zeus/zeus/components"
+	"github.com/go-zeus/zeus/server"
+)
+
 type App struct {
-	Name    string
-	servers []Server
-	clients []Client
-}
-
-type Server struct {
-	Name string
-	Port string
-	Ip   string
-}
-
-type Client struct {
-	Name     string
-	balancer Balancer
-}
-
-type Balancer struct {
-	Name string
+	Name       string
+	Service    server.Server
+	components map[string]*components.Component
 }
