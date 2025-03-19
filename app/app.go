@@ -28,9 +28,15 @@ func New(opts ...Option) App {
 	return a
 }
 
+func NewForConfig(c *Config) App {
+	a := &app{c: c}
+	return a
+}
+
 type Option func(s *app)
 
 type app struct {
+	c       *Config
 	servers []server.Server
 	components.BaseInstance
 }
