@@ -1,0 +1,73 @@
+# Dependabot 配置
+# 文档：https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+#
+# 主仓零第三方依赖，因此主仓本身没有 Go modules 可更新。
+# 这里主要为 plugins/*（独立 go.mod）和 GitHub Actions 提供依赖更新通知。
+
+version: 2
+
+updates:
+  # GitHub Actions 版本更新（CI/workflows 中的 action 版本）
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - github-actions
+    commit-message:
+      prefix: ci
+      include: scope
+
+  # 主仓 Go modules（虽然主仓零直接依赖，但 indirect 也需周期审计）
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "09:00"
+      timezone: Asia/Shanghai
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - go
+    commit-message:
+      prefix: deps
+      include: scope
+
+  # go.work 工作区（开发期 workspace）
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 1
+    labels: [dependencies, go, workspace]
+
+  # plugins/* 各独立 module（21 个，逐个监控）
+  # 每个 plugin 有独立 go.mod，需独立跟踪
+  - { package-ecosystem: gomod, directory: /plugins/cache/redis,       schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/client/grpc,       schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/config/etcd,       schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/config/k8s,        schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/database/mysql,    schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/database/postgres, schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/database/sqlite,   schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/encoding/protobuf, schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/job/cron,          schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/log/file_rotate,   schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/log/zap,           schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/metrics/prometheus,schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/middleware/metrics,schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/middleware/tracing,schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/mq/kafka,          schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/mq/nats,           schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/proxy/grpc,        schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/registry/etcd,     schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/registry/nacos,    schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/server/grpc,       schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }
+  - { package-ecosystem: gomod, directory: /plugins/trace/otel,        schedule: { interval: weekly, day: monday }, open-pull-requests-limit: 3, labels: [dependencies, go, plugins], commit-message: { prefix: deps, include: scope } }

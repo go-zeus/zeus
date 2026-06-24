@@ -1,0 +1,85 @@
+# CodeQL 代码安全扫描
+# 文档：https://docs.github.com/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors
+#
+# 覆盖范围：
+#   - 主仓（github.com/go-zeus/zeus）
+#   - plugins/*（独立 go.mod，需 GOWORK=off 单独分析）
+#   - examples/*（独立 go.mod，用户运行示例，安全同样重要）
+#
+# 触发：push 到 main/dev + PR 到 main + 每周一 09:00 周期扫描
+
+name: CodeQL
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 1 * * 1'  # 每周一 09:00 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write  # 上传 SARIF 结果必需
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go]
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整历史，便于增量分析
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false  # CodeQL 自带构建追踪，避免缓存干扰
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # queries: security-extended, security-and-quality 可开启更严格规则
+          queries: security-extended
+
+      - name: Build main module
+        run: |
+          # 主仓构建（CodeQL 会在构建过程中追踪）
+          go build ./...
+
+      - name: Build plugins (independent modules)
+        run: |
+          # plugins/* 独立 module，逐个构建供 CodeQL 追踪
+          for mod in $(find plugins -name go.mod -type f); do
+            echo "→ building $(dirname "$mod")"
+            (cd "$(dirname "$mod")" && GOWORK=off go build ./...) || true
+          done
+
+      - name: Build examples (independent modules)
+        run: |
+          # examples/* 同样独立，覆盖用户复制即用的代码路径
+          for mod in $(find examples -maxdepth 2 -name go.mod -type f); do
+            dir="$(dirname "$mod")"
+            # 跳过需要特殊 Go 版本的（如 registry-etcd 要求 go 1.25）
+            if grep -q "^go 1\.25" "$mod"; then
+              echo "→ skip $dir (requires go 1.25)"
+              continue
+            fi
+            echo "→ building $dir"
+            (cd "$dir" && GOWORK=off go build ./...) || true
+          done
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"

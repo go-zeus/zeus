@@ -1,0 +1,181 @@
+# Zeus 文档自动部署 workflow
+#
+# 部署目标（任选/全选）：
+#   1. GitHub Pages（默认，免费、零配置）
+#   2. 自有主机 + 自有域名（rsync over SSH，性能可控）
+#
+# 触发条件：
+#   - push 到 main 分支且 site/** 变更
+#   - 手动 workflow_dispatch（可单独选择部署目标）
+#
+# 配置自托管所需的 GitHub Secrets（在仓库 Settings → Secrets → Actions 添加）：
+#   DOCS_SSH_PRIVATE_KEY  部署专用 SSH 私钥（完整内容，含 BEGIN/END）
+#   DOCS_HOST             主机域名或 IP（如 docs.example.com 或 1.2.3.4）
+#   DOCS_USER             SSH 用户名（推荐专用账户 docsdeploy，不要用 root）
+#   DOCS_PORT             SSH 端口（默认 22）
+#   DOCS_PATH             部署目标目录（如 /var/www/zeus-docs）
+#
+# 跳过自托管的条件：缺少上述任一 Secret 时自动跳过该步骤
+
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - '.github/workflows/docs.yml'
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '部署目标'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both          # GitHub Pages + 自托管（默认）
+          - github-pages  # 仅 GitHub Pages
+          - self-hosted   # 仅自托管
+
+permissions:
+  contents: write   # GitHub Pages 提交到 gh-pages 分支必需
+  pages: write      # GitHub Pages API 必需
+  id-token: write   # GitHub Pages 部署必需
+
+jobs:
+  build:
+    name: Build Hugo site
+    runs-on: ubuntu-latest
+    outputs:
+      artifact: ${{ steps.upload-artifact.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # enableGitInfo 需要完整历史
+
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: '0.145.0'
+          extended: true
+
+      - name: Install theme
+        working-directory: site
+        run: |
+          mkdir -p themes
+          git clone --depth 1 --branch 9.0.3 \
+            https://github.com/McShelby/hugo-theme-relearn.git themes/relearn
+
+      - name: Build
+        working-directory: site
+        env:
+          HUGO_ENV: production
+        run: hugo --minify --gc --baseURL "https://docs.go-zeus.dev/"
+
+      - name: Upload artifact
+        id: upload-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: zeus-docs
+          path: site/public
+          retention-days: 7
+
+  deploy-github-pages:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      (github.event_name == 'push') ||
+      (inputs.target == 'both' || inputs.target == 'github-pages')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: zeus-docs
+          path: public
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./public
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'docs: deploy to GitHub Pages'
+
+  deploy-self-hosted:
+    name: Deploy to self-hosted server (rsync)
+    runs-on: ubuntu-latest
+    needs: build
+    if: |
+      (github.event_name == 'push' && secrets.Docs_HOST != '') ||
+      (inputs.target == 'both' || inputs.target == 'self-hosted')
+    # 仅当配置了 DOCS_HOST secret 时才执行
+
+    steps:
+      - name: Skip check (no self-hosted config)
+        run: |
+          if [ -z "${{ secrets.DOCS_HOST }}" ]; then
+            echo "::notice::DOCS_HOST secret not set, skipping self-hosted deployment"
+            echo "To enable: add DOCS_HOST / DOCS_USER / DOCS_SSH_PRIVATE_KEY secrets"
+            exit 0
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: zeus-docs
+          path: public
+
+      - name: Configure SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.DOCS_SSH_PRIVATE_KEY }}
+          SSH_HOST: ${{ secrets.DOCS_HOST }}
+          SSH_PORT: ${{ secrets.DOCS_PORT || '22' }}
+        run: |
+          set -euo pipefail
+
+          # 写入私钥（注意权限）
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          # 主机指纹加入 known_hosts（防中间人）
+          ssh-keyscan -p "$SSH_PORT" "$SSH_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Rsync deploy
+        env:
+          SSH_HOST: ${{ secrets.DOCS_HOST }}
+          SSH_USER: ${{ secrets.DOCS_USER }}
+          SSH_PORT: ${{ secrets.DOCS_PORT || '22' }}
+          DOCS_PATH: ${{ secrets.DOCS_PATH }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SSH_HOST" ] || [ -z "$SSH_USER" ] || [ -z "$DOCS_PATH" ]; then
+            echo "::error::Missing required secrets: DOCS_HOST / DOCS_USER / DOCS_PATH"
+            exit 1
+          fi
+
+          echo "→ Deploying to $SSH_USER@$SSH_HOST:$DOCS_PATH"
+
+          # rsync 增量同步
+          # -a 归档模式（保留权限/时间/软链）
+          # -v 详细输出
+          # -z 压缩传输
+          # --delete 删除目标端多余文件（保证与源一致）
+          # --chmod 设置文件权限（避免 umask 问题）
+          # -e ssh 指定端口
+          rsync -avz --delete \
+            --chmod=Du=rwx,Dg=rx,Do=rx,Fu=rw,Fg=r,Fo=r \
+            -e "ssh -p $SSH_PORT -o StrictHostKeyChecking=yes" \
+            ./public/ \
+            "$SSH_USER@$SSH_HOST:$DOCS_PATH/"
+
+          echo "✓ Deploy complete"
+
+      - name: Invalidate cache (optional)
+        if: secrets.DOCS_CACHE_URL != ''
+        env:
+          CACHE_URL: ${{ secrets.DOCS_CACHE_URL }}
+        run: |
+          echo "→ Optional: trigger cache purge at $CACHE_URL"
+          echo "Add your CDN cache purge logic here (Cloudflare / 阿里云CDN / etc.)"

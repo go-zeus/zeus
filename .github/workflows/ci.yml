@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Vet (main module)
+        run: go vet ./...
+      - name: Vet (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go vet ./...)
+          done
+
+  staticcheck:
+    # 静态分析：捕捉 vet 之外的潜在问题（unused、ineffectual assign、S1000+ 等）
+    # 与 lint job 分开：staticcheck 失败不阻塞 vet 通过；可独立降级
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: Staticcheck (main module)
+        run: staticcheck ./...
+      - name: Staticcheck (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off staticcheck ./...)
+          done
+      - name: Staticcheck (examples)
+        run: |
+          for mod in $(find examples -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off staticcheck ./...)
+          done
+
+  govulncheck:
+    # 供应链安全扫描：检测直接/间接依赖是否含已知 CVE
+    # 失败应阻塞发布，但 main 分支日常允许失败（用户可在 PR 上判断是否处理）
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Govulncheck (main module)
+        run: govulncheck ./...
+      - name: Govulncheck (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            echo "=== $(dirname "$mod") ==="
+            (cd "$(dirname "$mod")" && GOWORK=off govulncheck ./...) || true
+          done
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Test (main module)
+        run: go test -race -coverprofile=coverage.out ./...
+      - name: Coverage
+        run: go tool cover -func=coverage.out
+      - name: Test (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go test -race -timeout=120s ./...)
+          done
+
+  integration:
+    # 集成测试：起 postgres + nats + mysql service container，跑插件端到端测试
+    # 与 test job 分开：失败不阻塞核心测试通过
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      nats:
+        image: nats:2.10
+        ports:
+          - 4222:4222
+        options: >-
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ""
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ZEUS_POSTGRES_DSN: "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=test sslmode=disable"
+      ZEUS_NATS_URL: "nats://127.0.0.1:4222"
+      ZEUS_MYSQL_DSN: "root:@tcp(127.0.0.1:3306)/test?parseTime=true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Integration test (database/postgres)
+        run: |
+          cd plugins/database/postgres && GOWORK=off go test -race -timeout=60s -run EndToEnd ./...
+      - name: Integration test (database/mysql)
+        run: |
+          cd plugins/database/mysql && GOWORK=off go test -race -timeout=60s -run EndToEnd ./...
+      - name: Integration test (mq/nats)
+        run: |
+          cd plugins/mq/nats && GOWORK=off go test -race -timeout=60s -run "EndToEnd|BaggagePropagation|HandlerError" ./...
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build (main module)
+        run: go build ./...
+      - name: Build (examples)
+        run: |
+          for mod in $(find examples -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go build ./...)
+          done
+      - name: Build (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go build ./...)
+          done
