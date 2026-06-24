@@ -1,0 +1,86 @@
+# api-1 调用链入口：default + batch.v3 两个集群部署
+#
+# 部署矩阵：
+#   - default   : api1 + srv1 + srv2 + srv3（全量）
+#   - user.v1.1 : srv1 + srv2（缺 api1/srv3 → 降级 default）
+#   - order.v2  : srv2（其他都降级 default）
+#   - batch.v3  : api1 + srv1 + srv3（缺 srv2 → 降级 default）
+#
+# api1 仅在 default 和 batch.v3 集群部署
+# === api-1 default ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-api1-default
+  namespace: zeus-demo
+  labels:
+    app: api1
+    cluster: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api1
+      cluster: default
+  template:
+    metadata:
+      labels:
+        app: api1
+        cluster: default
+    spec:
+      containers:
+        - name: api1
+          image: zeus-api1:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9000
+          env:
+            - name: CLUSTER
+              value: default
+            - name: PORT
+              value: "9000"
+            - name: GATEWAY_URL
+              value: http://gateway.zeus-demo.svc.cluster.local:8080
+          readinessProbe:
+            httpGet: { path: /health, port: 9000 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+# === api-1 batch.v3 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-api1-batch-v3
+  namespace: zeus-demo
+  labels:
+    app: api1
+    cluster: batch.v3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: api1
+      cluster: batch.v3
+  template:
+    metadata:
+      labels:
+        app: api1
+        cluster: batch.v3
+    spec:
+      containers:
+        - name: api1
+          image: zeus-api1:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9000
+          env:
+            - name: CLUSTER
+              value: batch.v3
+            - name: PORT
+              value: "9000"
+            - name: GATEWAY_URL
+              value: http://gateway.zeus-demo.svc.cluster.local:8080
+          readinessProbe:
+            httpGet: { path: /health, port: 9000 }
+            initialDelaySeconds: 2
+            periodSeconds: 5

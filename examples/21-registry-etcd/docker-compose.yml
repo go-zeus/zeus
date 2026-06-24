@@ -1,0 +1,53 @@
+# 21-registry-etcd 一键启动
+#
+# 启动：
+#   docker compose -f examples/21-registry-etcd/docker-compose.yml up --build
+#
+# 访问：
+#   curl http://localhost:18080/                  # 业务接口
+#   curl http://localhost:18080/health            # 健康检查
+#   docker exec -it $(docker ps -qf name=etcd) \
+#       etcdctl get --prefix /zeus/                # 查看 etcd 注册的实例
+#
+# 拓扑：
+#   app (18080) ──register──► etcd (2379)
+#
+# Ctrl+C 退出时 app 会先 Deregister 再退出；
+# 异常退出（docker kill）时 etcd lease 到期（15s）后自动删除。
+
+services:
+  etcd:
+    image: quay.io/coreos/etcd:v3.6.12
+    environment:
+      ETCD_AUTO_COMPACTION_MODE: periodic
+      ETCD_AUTO_COMPACTION_RETENTION: "1h"
+      ETCD_QUOTA_BACKEND_BYTES: "8589934592"   # 8GB
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_INITIAL_CLUSTER: default=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_TOKEN: etcd-cluster
+      ETCD_INITIAL_CLUSTER_STATE: new
+      ALLOW_NONE_AUTHENTICATION: "yes"
+    ports:
+      - "2379:2379"
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      ZEUS_ETCD_ENDPOINT: "etcd:2379"
+    ports:
+      - "18080:18080"
+    depends_on:
+      etcd:
+        condition: service_healthy
+    restart: unless-stopped

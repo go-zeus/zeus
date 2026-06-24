@@ -1,0 +1,92 @@
+# Zeus 文档站点配置
+# 主题：Hugo Relearn（纯 Hugo 实现，无 Node 依赖）
+# 仓库：https://github.com/McShelby/hugo-theme-relearn
+
+baseURL = "https://go-zeus.github.io/zeus/"
+languageCode = "zh-CN"
+defaultContentLanguage = "zh"
+title = "Zeus"
+theme = "relearn"
+canonifyURLs = false
+relativeURLs = false
+disablePathToLower = true
+enableGitInfo = true
+
+# 输出静态文件到 site/public
+publishDir = "public"
+
+# 不生成 taxonomy 页面（项目文档不需要）
+disableKinds = ["taxonomy", "term"]
+
+[params]
+  # 作者与描述（Relearn 9.x 推荐用 [params.author] 子表）
+  [params.author]
+    name = "Zeus Contributors"
+
+  # 仓库链接（用于"编辑此页"按钮）
+  editURL = "https://github.com/go-zeus/zeus/edit/main/site/content/"
+  github_repo = "https://github.com/go-zeus/zeus"
+
+  # 侧边栏配置
+  disableInlineCopyToClipLine = true
+  disableNextPrev = false
+  ordersectionsby = "weight"
+
+  # 搜索
+  [params.search]
+    enabled = true
+
+  # 主题风格（Relearn 9.x 数组表）
+  # 注意：auto 必须是独立的变体，不能挂在 dark 上
+  # 否则"暗色"会被识别为 auto（跟随系统），点击后看似没反应
+  [[params.themeVariant]]
+    identifier = "auto"
+    name = "自动"
+    auto = ["zen-light", "zen-dark"]
+  [[params.themeVariant]]
+    identifier = "zen-light"
+    name = "亮色"
+  [[params.themeVariant]]
+    identifier = "zen-dark"
+    name = "暗色"
+
+# 多语言配置（先做中文，英文占位）
+[languages]
+  [languages.zh]
+    languageName = "中文"
+    weight = 1
+    title = "Zeus"
+    [languages.zh.params]
+      subtitle = "Go 微服务框架"
+    [[languages.zh.menu.shortcuts]]
+      name = "GitHub"
+      url = "https://github.com/go-zeus/zeus"
+      weight = 1
+    [[languages.zh.menu.shortcuts]]
+      name = "Issues"
+      url = "https://github.com/go-zeus/zeus/issues"
+      weight = 2
+    [[languages.zh.menu.shortcuts]]
+      name = "Discussions"
+      url = "https://github.com/go-zeus/zeus/discussions"
+      weight = 3
+    [[languages.zh.menu.shortcuts]]
+      name = "安全政策"
+      url = "https://github.com/go-zeus/zeus/blob/main/SECURITY.md"
+      weight = 4
+
+# Markdown 渲染
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true  # 允许 HTML 嵌入
+  [markup.highlight]
+    codeFences = true
+    lineNos = true
+    lineNumbersInTable = false
+    noClasses = false
+    style = "github"
+  [markup.tableOfContents]
+    startLevel = 2
+    endLevel = 4
+    ordered = false

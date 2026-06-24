@@ -1,0 +1,89 @@
+# srv-2 订单：default + user.v1.1 + order.v2 三个集群部署
+# srv2 不在 batch.v3 部署 → batch.v3 流量到达 srv2 时降级到 default
+#
+# === srv-2 default ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv2-default
+  namespace: zeus-demo
+  labels: { app: srv2, cluster: default }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: srv2, cluster: default }
+  template:
+    metadata:
+      labels: { app: srv2, cluster: default }
+    spec:
+      containers:
+        - name: srv2
+          image: zeus-srv2:latest
+          imagePullPolicy: Never
+          ports: [{ containerPort: 9002 }]
+          env:
+            - { name: CLUSTER, value: default }
+            - { name: PORT, value: "9002" }
+            - { name: GATEWAY_URL, value: http://gateway.zeus-demo.svc.cluster.local:8080 }
+          readinessProbe:
+            httpGet: { path: /health, port: 9002 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+# === srv-2 user.v1.1 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv2-user-v1-1
+  namespace: zeus-demo
+  labels: { app: srv2, cluster: user.v1.1 }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: srv2, cluster: user.v1.1 }
+  template:
+    metadata:
+      labels: { app: srv2, cluster: user.v1.1 }
+    spec:
+      containers:
+        - name: srv2
+          image: zeus-srv2:latest
+          imagePullPolicy: Never
+          ports: [{ containerPort: 9002 }]
+          env:
+            - { name: CLUSTER, value: user.v1.1 }
+            - { name: PORT, value: "9002" }
+            - { name: GATEWAY_URL, value: http://gateway.zeus-demo.svc.cluster.local:8080 }
+          readinessProbe:
+            httpGet: { path: /health, port: 9002 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+# === srv-2 order.v2 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv2-order-v2
+  namespace: zeus-demo
+  labels: { app: srv2, cluster: order.v2 }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: srv2, cluster: order.v2 }
+  template:
+    metadata:
+      labels: { app: srv2, cluster: order.v2 }
+    spec:
+      containers:
+        - name: srv2
+          image: zeus-srv2:latest
+          imagePullPolicy: Never
+          ports: [{ containerPort: 9002 }]
+          env:
+            - { name: CLUSTER, value: order.v2 }
+            - { name: PORT, value: "9002" }
+            - { name: GATEWAY_URL, value: http://gateway.zeus-demo.svc.cluster.local:8080 }
+          readinessProbe:
+            httpGet: { path: /health, port: 9002 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
