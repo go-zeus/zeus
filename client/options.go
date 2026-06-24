@@ -11,7 +11,7 @@ func Discovery(dis registry.Discovery) Option {
 	}
 }
 
-func LoadBalance(lb balancer.LoadBalance) Option {
+func LoadBalance(lb balancer.Balancer) Option {
 	return func(c *client) {
 		c.lb = lb
 	}

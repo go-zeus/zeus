@@ -42,8 +42,11 @@ func (g *Group) done() {
 // The derived Context is canceled the first time a function passed to Go
 // returns a non-nil error or the first time Wait returns, whichever occurs
 // first.
+//
+// 实现说明：直接用 context.WithCancelCause（Go 1.20+ 标准库），
+// 项目 go.mod 要求 go 1.22+，无需 pre_go120 兼容分支。
 func WithContext(ctx context.Context) (*Group, context.Context) {
-	ctx, cancel := withCancelCause(ctx)
+	ctx, cancel := context.WithCancelCause(ctx)
 	return &Group{cancel: cancel}, ctx
 }
 

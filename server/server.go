@@ -1,73 +1,19 @@
 package server
 
-import (
-	"context"
-	"fmt"
-	"github.com/go-zeus/zeus/log"
-	"net/http"
-)
+import "context"
 
-const (
-	DefaultPort = 8080
-)
-
-var DefaultServer = New()
-
+// Server 服务器接口
+//
+// 具体实现：
+//   - server/http 包：HTTP/HTTPS 服务器（构造函数 NewHTTP）
+//   - plugins/server/grpc：gRPC 服务器
+//
+// 用户应通过 components.NewServerComponent(http.NewHTTP(...)) 显式装配，
+// 而不是依赖全局默认 server。L1 用户使用 app.Run(cfg, handler) 入口，
+// 内部按 handler 类型自动选择 server 实现。
 type Server interface {
-	Init(opts ...Option)
-	GetIp() string
-	GetPort() int
-	Run(close <-chan struct{}) error
-}
-
-type server struct {
-	ip   string
-	port int
-	*http.Server
-}
-
-type Option func(s *server)
-
-func New(opts ...Option) Server {
-	s := &server{
-		Server: &http.Server{},
-	}
-	for _, opt := range opts {
-		opt(s)
-	}
-	if s.port == 0 {
-		s.port = DefaultPort
-	}
-	if s.Handler == nil {
-		s.Handler = DefaultHandler()
-	}
-	return s
-}
-
-func (s *server) GetIp() string {
-	return s.ip
-}
-
-func (s *server) GetPort() int {
-	return s.port
-}
-
-func (s *server) Init(opts ...Option) {
-	for _, opt := range opts {
-		opt(s)
-	}
-}
-
-func (s *server) address() string {
-	return fmt.Sprintf("%s:%d", s.ip, s.port)
-}
-
-func (s *server) Run(close <-chan struct{}) error {
-	log.Info("server start is %s", s.address())
-	s.Addr = s.address()
-	go func() {
-		<-close
-		s.Shutdown(context.TODO())
-	}()
-	return s.ListenAndServe()
+	Protocol() string
+	Endpoint() string
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
 }

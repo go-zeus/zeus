@@ -12,10 +12,6 @@ type MD map[string]string
 // Get 获取一个KEY
 func (md MD) Get(key string) (string, bool) {
 	val, ok := md[key]
-	if ok {
-		return val, ok
-	}
-	val, ok = md[key]
 	return val, ok
 }
 
@@ -82,13 +78,7 @@ func Get(ctx context.Context, key string) (string, bool) {
 	if !ok {
 		return "", ok
 	}
-	val, ok := md[key]
-	if ok {
-		return val, ok
-	}
-	val, ok = md[key]
-
-	return val, ok
+	return md.Get(key)
 }
 
 // FromContext 从上下文获取所有

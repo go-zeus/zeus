@@ -1,36 +1,33 @@
 package json
 
 import (
-	"encoding/json"
+	stdjson "encoding/json"
+
 	"github.com/go-zeus/zeus/encoding"
 )
 
 const Name = "json"
 
-func init() {
-	encoding.Register(codec{})
-}
+func New() encoding.Codec { return &codec{} }
 
 type codec struct{}
 
 func (codec) Marshal(v any) ([]byte, error) {
 	switch m := v.(type) {
-	case json.Marshaler:
+	case stdjson.Marshaler:
 		return m.MarshalJSON()
 	default:
-		return json.Marshal(m)
+		return stdjson.Marshal(m)
 	}
 }
 
 func (codec) Unmarshal(data []byte, v any) error {
 	switch m := v.(type) {
-	case json.Unmarshaler:
+	case stdjson.Unmarshaler:
 		return m.UnmarshalJSON(data)
 	default:
-		return json.Unmarshal(data, m)
+		return stdjson.Unmarshal(data, m)
 	}
 }
 
-func (codec) Name() string {
-	return Name
-}
+func (codec) Name() string { return Name }

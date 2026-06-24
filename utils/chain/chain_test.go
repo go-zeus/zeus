@@ -215,3 +215,115 @@ func TestExtendRespectsImmutability(t *testing.T) {
 		t.Error("Extend does not respect immutability")
 	}
 }
+
+// —— P2-3 辅助函数测试 ——
+
+// TestFromPure_PureAdaptsToMiddleware Pure 类型应能适配为 Middleware
+func TestFromPure_PureAdaptsToMiddleware(t *testing.T) {
+	// 一个 alice 风格的中间件（无 error）
+	pureMiddleware := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("pure\n"))
+			h.ServeHTTP(w, r)
+		})
+	}
+
+	ch := New(FromPure(pureMiddleware))
+	handler := ch.MustThen(testApp)
+
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+	handler.ServeHTTP(w, r)
+
+	if w.Body.String() != "pure\napp\n" {
+		t.Errorf("FromPure not adapting correctly, got %q", w.Body.String())
+	}
+}
+
+// TestFromPure_MixedWithRegularMiddleware Pure 与 Middleware 可混用
+func TestFromPure_MixedWithRegularMiddleware(t *testing.T) {
+	pureMiddleware := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte("pure\n"))
+			h.ServeHTTP(w, r)
+		})
+	}
+
+	ch := New(
+		tagMiddleware("tag1\n"),
+		FromPure(pureMiddleware),
+		tagMiddleware("tag2\n"),
+	)
+	handler := ch.MustThen(testApp)
+
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+	handler.ServeHTTP(w, r)
+
+	expected := "tag1\npure\ntag2\napp\n"
+	if w.Body.String() != expected {
+		t.Errorf("mixed chain = %q, want %q", w.Body.String(), expected)
+	}
+}
+
+// TestMust_NoErrorOnSuccess 不出错时正常返回 handler
+func TestMust_NoErrorOnSuccess(t *testing.T) {
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+	got := Must(h, nil)
+	if got == nil {
+		t.Error("Must should return non-nil handler when err is nil")
+	}
+	// 验证返回的 handler 行为正确（应等于 h 的行为）
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+	got.ServeHTTP(w, r)
+	if w.Body.Len() != 0 {
+		t.Error("Must should preserve original handler behavior")
+	}
+}
+
+// TestMust_PanicsOnError 有 error 时应 panic
+func TestMust_PanicsOnError(t *testing.T) {
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("Must should panic on error")
+		}
+	}()
+	_ = Must(nil, http.ErrAbortHandler)
+}
+
+// TestMustThen_ChainMethod 链式 MustThen 等价于 Must(c.Then(h))
+func TestMustThen_ChainMethod(t *testing.T) {
+	ch := New(tagMiddleware("mw\n"))
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("MustThen should not panic on success: %v", r)
+		}
+	}()
+
+	handler := ch.MustThen(testApp)
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(http.MethodGet, "/", nil)
+	handler.ServeHTTP(w, r)
+
+	if w.Body.String() != "mw\napp\n" {
+		t.Errorf("MustThen result = %q", w.Body.String())
+	}
+}
+
+// TestMustThen_PropagatesPanic 出错时应 panic
+func TestMustThen_PropagatesPanic(t *testing.T) {
+	errMid := func(h http.Handler) (http.Handler, error) {
+		return nil, http.ErrAbortHandler
+	}
+	ch := New(errMid)
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("MustThen should panic when middleware errors")
+		}
+	}()
+
+	_ = ch.MustThen(testApp)
+}
