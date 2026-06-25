@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"sync/atomic"
 
 	"github.com/go-zeus/zeus/propagation"
@@ -179,10 +180,35 @@ func (s *stdWriter) Log(_ context.Context, level Level, msg string, fields ...Fi
 		levelStr = "FATAL"
 	}
 	if len(fields) > 0 {
-		fmt.Printf("[%s] %s %v\n", levelStr, msg, fields)
+		fmt.Printf("[%s] %s %v\n", levelStr, sanitizeLogMsg(msg), fields)
 	} else {
-		fmt.Printf("[%s] %s\n", levelStr, msg)
+		fmt.Printf("[%s] %s\n", levelStr, sanitizeLogMsg(msg))
 	}
 }
 
 func (s *stdWriter) Close() error { return nil }
+
+// sanitizeLogMsg 清理用户提供的日志消息中的控制字符，
+// 防止日志注入（伪造日志行 / 终端转义序列攻击）。
+//
+// 保留可见 ASCII、常见空白（空格/Tab）；其他控制字符（含 \n \r）替换为可视化形式。
+// 业务侧如需保留原始数据，应在调用 Log 前自行处理（如 base64 / hex）。
+func sanitizeLogMsg(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r == '\n':
+			b.WriteString("\\n")
+		case r == '\r':
+			b.WriteString("\\r")
+		case r == '\t':
+			b.WriteString("\\t")
+		case r < 0x20 || r == 0x7f:
+			b.WriteString("?")
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}

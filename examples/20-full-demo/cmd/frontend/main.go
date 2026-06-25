@@ -12,8 +12,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
-	"strings"
 )
 
 const defaultStaticDir = "/app/frontend"
@@ -62,22 +60,13 @@ func main() {
 		w.Write([]byte("ok"))
 	})
 
-	// 静态文件
+	// 静态文件：用 http.FileServer + http.Dir（内置路径遍历防护）
+	fileServer := http.FileServer(http.Dir(staticDir))
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// CORS
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		// 防止路径穿越
-		path := filepath.Clean(r.URL.Path)
-		if strings.HasPrefix(path, "..") {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		full := filepath.Join(staticDir, path)
-		// 目录默认 index.html
-		if fi, err := os.Stat(full); err == nil && fi.IsDir() {
-			full = filepath.Join(full, "index.html")
-		}
-		http.ServeFile(w, r, full)
+		// http.FileServer 已对 r.URL.Path 做 safe 清洗，无需手动处理路径遍历
+		fileServer.ServeHTTP(w, r)
 	}))
 
 	log.Printf("frontend serving %s on :%s (gateway=%s)", staticDir, port, gatewayURL)
