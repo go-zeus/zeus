@@ -70,7 +70,7 @@ func TestE2E_HTTP_ClusterRouting(t *testing.T) {
 		}
 		resp, err := srv2Client.Do(req)
 		if err != nil {
-			http.Error(w, err.Error(), 502)
+			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
 		defer resp.Body.Close()
