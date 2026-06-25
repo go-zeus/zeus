@@ -106,15 +106,18 @@ jobs:
     name: Deploy to self-hosted server (rsync)
     runs-on: ubuntu-latest
     needs: build
+    # 注意：GitHub Actions 不允许在 job-level if 中读取 secrets 上下文
+    # 所以这里只在 job 入口判断事件类型/输入参数，secret 存在性检查放在 step 内
     if: |
-      (github.event_name == 'push' && secrets.Docs_HOST != '') ||
+      (github.event_name == 'push') ||
       (inputs.target == 'both' || inputs.target == 'self-hosted')
-    # 仅当配置了 DOCS_HOST secret 时才执行
 
     steps:
       - name: Skip check (no self-hosted config)
+        env:
+          DOCS_HOST: ${{ secrets.DOCS_HOST }}
         run: |
-          if [ -z "${{ secrets.DOCS_HOST }}" ]; then
+          if [ -z "$DOCS_HOST" ]; then
             echo "::notice::DOCS_HOST secret not set, skipping self-hosted deployment"
             echo "To enable: add DOCS_HOST / DOCS_USER / DOCS_SSH_PRIVATE_KEY secrets"
             exit 0
@@ -173,9 +176,10 @@ jobs:
           echo "✓ Deploy complete"
 
       - name: Invalidate cache (optional)
-        if: secrets.DOCS_CACHE_URL != ''
+        # 通过 env 间接读取 secret（step-level if 不能直接读 secrets 上下文）
         env:
           CACHE_URL: ${{ secrets.DOCS_CACHE_URL }}
+        if: env.CACHE_URL != ''
         run: |
           echo "→ Optional: trigger cache purge at $CACHE_URL"
           echo "Add your CDN cache purge logic here (Cloudflare / 阿里云CDN / etc.)"
