@@ -117,9 +117,7 @@ type loader struct {
 	client     *clientv3.Client
 	ownsClient bool
 
-	mu      sync.Mutex
-	once    sync.Once
-	initErr error
+	mu sync.Mutex
 }
 
 // New 创建 etcd 配置加载器。

@@ -29,12 +29,13 @@ jobs:
 
   staticcheck:
     # 静态分析：捕捉 vet 之外的潜在问题（unused、ineffectual assign、S1000+ 等）
+    # 用 Go 1.26：plugins/config/k8s 依赖 k8s.io/apimachinery v0.36+，强制要求 Go 1.26
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
           cache: false
       - name: Install staticcheck
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
@@ -80,7 +81,8 @@ jobs:
         with:
           go-version: '1.25'
       - name: Test (main module)
-        run: go test -race -coverprofile=coverage.out ./...
+        # -v 输出便于定位失败用例；-timeout 防止单包挂死拖累整个 CI
+        run: go test -race -timeout=300s -v -coverprofile=coverage.out ./... 2>&1 | tee test.log
       - name: Coverage
         run: go tool cover -func=coverage.out
       - name: Test (plugins)
@@ -88,6 +90,13 @@ jobs:
           for mod in $(find plugins -name go.mod -type f); do
             (cd "$(dirname "$mod")" && GOWORK=off go test -race -timeout=120s ./...)
           done
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: test.log
+          retention-days: 7
 
   integration:
     # 集成测试：起 postgres + nats + mysql service container，跑插件端到端测试
