@@ -1,28 +1,23 @@
 package registry
 
 import (
+	"context"
+
 	"github.com/go-zeus/zeus/types"
 )
 
-// Registry 注册中心
-type Registry interface {
-	Register
-	Discovery
-	String() string
+// Registrar 服务注册接口
+type Registrar interface {
+	Register(ctx context.Context, ins *types.Instance) error
+	Deregister(ctx context.Context, ins *types.Instance) error
 }
 
-// Register 服务注册
-type Register interface {
-	Register(ins *types.Instance) (err error)
-	Deregister(ins *types.Instance) (err error)
-}
-
-type Discovery interface {
-	Watcher
-	Storage
-}
-
-// Watcher 服务监听
+// Watcher 服务监听接口
 type Watcher interface {
-	Watch(serviceName string) <-chan struct{}
+	Watch(ctx context.Context, serviceName string) (<-chan struct{}, error)
+}
+
+// Discovery 服务发现接口
+type Discovery interface {
+	GetService(ctx context.Context, serviceName string) (*types.ServiceEntry, error)
 }

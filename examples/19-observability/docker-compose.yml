@@ -1,0 +1,72 @@
+# 19-observability 一键启动
+#
+# 启动：
+#   docker compose -f examples/19-observability/docker-compose.yml up --build
+#
+# 访问：
+#   App:        http://localhost:18090/ping            # 业务接口
+#   Metrics:    http://localhost:18090/metrics         # Prometheus 文本暴露
+#   Prometheus: http://localhost:9090                  # 查询 zeus_requests_total
+#   Grafana:    http://localhost:3000  (admin/admin)   # 数据源 prometheus 已配好
+#   Jaeger:     http://localhost:16686                 # 暂无数据（main.go 默认 stdout exporter）
+#
+# 把 trace 也接入 Jaeger：
+#   修改 main.go：otel.New(otel.WithOTLPEndpoint("jaeger:4317"))
+#   重启后访问 http://localhost:16686 即可查看 span（含 zeus.cluster attribute）
+#
+# 拓扑：
+#   app (18090/metrics) ◄──scrape── Prometheus (9090) ◄──query── Grafana (3000)
+#   app (OTLP/4317)      ──export──► Jaeger (16686)   [需 main.go 改 WithOTLPEndpoint]
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "18090:18090"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:18090/metrics"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC（main.go 改 WithOTLPEndpoint("jaeger:4317") 后可用）
+      - "4318:4318"     # OTLP HTTP
+    restart: unless-stopped
+
+volumes:
+  grafana-data:

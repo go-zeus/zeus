@@ -1,0 +1,14 @@
+# Prometheus 抓取配置
+#   docker compose 启动后，prometheus 自动每 15s 抓 app:18090/metrics
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: zeus-observability-demo
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["app:18090"]
+        labels:
+          service: zeus-observability-demo

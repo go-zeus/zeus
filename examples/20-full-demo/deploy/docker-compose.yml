@@ -1,0 +1,208 @@
+# Zeus full-demo docker-compose 编排
+#
+# 启动：
+#   docker compose -f examples/20-full-demo/deploy/docker-compose.yml up --build
+# 访问：
+#   http://localhost:8088  （前端）
+#   http://localhost:8080  （gateway 直连）
+#
+# 拓扑（与 deploy/k8s/*.yaml 完全一致）：
+#   frontend (8088) ──► gateway (8080) ──► api1 (9000) ──► srv1 (9001)
+#                                              │              │
+#                                              ▼              ▼
+#                                           srv2 (9002) ◄── srv3 (9003)
+#
+# 集群分布矩阵（按业务灰度维度）：
+#   ┌──────────┬──────────┬──────────┬───────────┬───────────┐
+#   │  服务    │ default  │ user.v1.1│ order.v2  │ batch.v3  │
+#   ├──────────┼──────────┼──────────┼───────────┼───────────┤
+#   │  api1    │   ✓      │          │           │   ✓       │
+#   │  srv1    │   ✓      │   ✓      │           │   ✓       │
+#   │  srv2    │   ✓      │   ✓      │   ✓       │           │
+#   │  srv3    │   ✓      │          │           │   ✓       │
+#   └──────────┴──────────┴──────────┴───────────┴───────────┘
+#   缺失集群的服务降级路由到 default（与 K8s 部署一致）
+#
+# 共 12 个服务：1 gateway + 1 frontend + 2 api1 + 3 srv1 + 3 srv2 + 2 srv3
+# host 端口映射仅 gateway:8080 + frontend:8088（与 K8s 中 Service 类型一致：
+#   gateway 用 LoadBalancer / Ingress 暴露，frontend 用 NodePort，其余 ClusterIP 内部访问）
+
+# 服务镜像构建模板：每条服务通过 build.args.SVC 指定编译目标
+x-build-common: &build-common
+  context: ../../..                       # 仓库根（满足 replace github.com/go-zeus/zeus => ../../）
+  dockerfile: examples/20-full-demo/docker/service.Dockerfile
+
+x-frontend-build: &frontend-build
+  context: ../../..
+  dockerfile: examples/20-full-demo/docker/frontend.Dockerfile
+
+services:
+  gateway:
+    build:
+      <<: *build-common
+      args:
+        SVC: gateway
+    environment:
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/services"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # === api-1 调用链入口（default + batch.v3） ===
+  api1-default:
+    build:
+      <<: *build-common
+      args:
+        SVC: api1
+    environment:
+      CLUSTER: default
+      PORT: "9000"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  api1-batch-v3:
+    build:
+      <<: *build-common
+      args:
+        SVC: api1
+    environment:
+      CLUSTER: batch.v3
+      PORT: "9000"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # === srv-1 用户认证（default + user.v1.1 + batch.v3） ===
+  srv1-default:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv1
+    environment:
+      CLUSTER: default
+      PORT: "9001"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  srv1-user-v1-1:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv1
+    environment:
+      CLUSTER: user.v1.1
+      PORT: "9001"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  srv1-batch-v3:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv1
+    environment:
+      CLUSTER: batch.v3
+      PORT: "9001"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # === srv-2 订单（default + user.v1.1 + order.v2） ===
+  srv2-default:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv2
+    environment:
+      CLUSTER: default
+      PORT: "9002"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  srv2-user-v1-1:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv2
+    environment:
+      CLUSTER: user.v1.1
+      PORT: "9002"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  srv2-order-v2:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv2
+    environment:
+      CLUSTER: order.v2
+      PORT: "9002"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # === srv-3 支付（default + batch.v3） ===
+  srv3-default:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv3
+    environment:
+      CLUSTER: default
+      PORT: "9003"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  srv3-batch-v3:
+    build:
+      <<: *build-common
+      args:
+        SVC: srv3
+    environment:
+      CLUSTER: batch.v3
+      PORT: "9003"
+      GATEWAY_URL: http://gateway:8080
+    depends_on:
+      gateway:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # === 前端 ===
+  frontend:
+    build:
+      <<: *frontend-build
+    ports:
+      - "8088:80"
+    depends_on:
+      - gateway
+    restart: unless-stopped

@@ -1,0 +1,20 @@
+# Issue 模板配置
+# 文档：https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository
+
+# 禁止空 issue（强制用户选模板）
+blank_issues_enabled: false
+
+# 引导链接：在 Issue 创建页底部展示
+contact_links:
+  - name: 💬 提问与讨论
+    url: https://github.com/go-zeus/zeus/discussions
+    about: 使用问题、想法讨论、最佳实践请到 Discussions
+  - name: 📖 设计文档
+    url: https://github.com/go-zeus/zeus/blob/main/CLAUDE.md
+    about: 4 层 API 设计、概念分层、组件装配等核心文档
+  - name: 🔒 安全漏洞披露
+    url: https://github.com/go-zeus/zeus/blob/main/SECURITY.md
+    about: 安全问题请勿开公开 Issue，按 SECURITY.md 流程私下披露
+  - name: 📚 插件文档
+    url: https://github.com/go-zeus/zeus/tree/main/plugins
+    about: 21 个官方插件的 README 与使用说明

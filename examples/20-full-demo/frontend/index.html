@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zeus Cluster Routing Demo</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header>
+    <h1>Zeus Cluster Routing Demo</h1>
+    <p class="subtitle">gateway → api-1 → srv-1 → srv-2 → srv-3，按 X-Zeus-Cluster 路由；路径中缺失节点自动降级到 default</p>
+  </header>
+
+  <main>
+    <!-- 控制面板 -->
+    <section class="panel controls">
+      <h2>1. 发起请求</h2>
+      <div class="btn-group">
+        <button id="btn-default" class="btn btn-default">default</button>
+        <button id="btn-user" class="btn btn-user">user.v1.1</button>
+        <button id="btn-order" class="btn btn-order">order.v2</button>
+        <button id="btn-batch" class="btn btn-batch">batch.v3</button>
+        <button id="btn-refresh" class="btn btn-secondary">刷新</button>
+      </div>
+      <label class="auto-refresh">
+        <input type="checkbox" id="auto-refresh" checked /> 每 2s 自动刷新实例
+      </label>
+      <table class="deploy-matrix">
+        <thead>
+          <tr><th>cluster</th><th>api1</th><th>srv1</th><th>srv2</th><th>srv3</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>default</td>   <td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+          <tr><td>user.v1.1</td> <td class="no">·</td> <td class="yes">✓</td><td class="yes">✓</td><td class="no">·</td></tr>
+          <tr><td>order.v2</td>  <td class="no">·</td> <td class="no">·</td> <td class="yes">✓</td><td class="no">·</td></tr>
+          <tr><td>batch.v3</td>  <td class="yes">✓</td><td class="yes">✓</td><td class="no">·</td> <td class="yes">✓</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 流量拓扑 -->
+    <section class="panel topology">
+      <h2>2. 流量拓扑</h2>
+      <div class="legend">
+        <span><span class="dot dot-default"></span>default</span>
+        <span><span class="dot dot-user"></span>user.v1.1</span>
+        <span><span class="dot dot-order"></span>order.v2</span>
+        <span><span class="dot dot-batch"></span>batch.v3</span>
+        <span><span class="dot dot-fallback"></span>降级（虚线灰）</span>
+        <span><span class="dot dot-active"></span>当前路径</span>
+      </div>
+      <svg id="topology" viewBox="0 0 870 400" xmlns="http://www.w3.org/2000/svg"></svg>
+    </section>
+
+    <!-- 调用链路 -->
+    <section class="panel trace">
+      <h2>3. 调用链路（最近一次响应）</h2>
+      <pre id="trace-output">等待请求...</pre>
+    </section>
+  </main>
+
+  <footer>
+    <p>Zeus Framework · <a href="https://github.com/go-zeus/zeus" target="_blank">github.com/go-zeus/zeus</a></p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

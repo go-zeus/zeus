@@ -1,0 +1,19 @@
+# 可选：Ingress 把 gateway 也对外暴露（如果集群有 ingress controller）
+# 取消注释并配置 host 后使用：
+#
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: zeus-gateway
+#   namespace: zeus-demo
+# spec:
+#   rules:
+#     - host: zeus-demo.local
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: gateway
+#                 port: { number: 8080 }

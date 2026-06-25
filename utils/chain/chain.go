@@ -5,6 +5,30 @@ import "net/http"
 // Middleware 中间件构造函数
 type Middleware func(http.Handler) (http.Handler, error)
 
+// Pure 无错误版本的中间件类型（对齐 alice / chi / gorilla 主流签名）
+//
+// 用途：让大量已有的 `func(http.Handler) http.Handler` 中间件（如 gorilla/handlers）
+// 无需包装即可加入 Chain
+//
+// 与 Middleware 的关系：
+//   - Middleware 返回 (handler, error) —— 支持构造期校验（如配置错误）
+//   - Pure 返回 handler —— 适合纯运行时逻辑（无错误路径）
+//
+// 转换：用 FromPure 把 Pure 包装为 Middleware
+type Pure func(http.Handler) http.Handler
+
+// FromPure 把 Pure 转换为 Middleware（适配 alice 风格中间件）
+//
+// 示例：
+//
+//	import "github.com/gorilla/handlers"
+//	ch := chain.New(chain.FromPure(handlers.CompressHandler))
+func FromPure(p Pure) Middleware {
+	return func(h http.Handler) (http.Handler, error) {
+		return p(h), nil
+	}
+}
+
 // Chain 处理程序的构造函数
 type Chain struct {
 	middlewares []Middleware
@@ -59,4 +83,28 @@ func (c Chain) Append(middlewares ...Middleware) Chain {
 //	ext2Chain := stdChain.Extend(ext1Chain)  m1 -> m2 -> m3 -> m4
 func (c Chain) Extend(chain Chain) Chain {
 	return c.Append(chain.middlewares...)
+}
+
+// Must 把 (handler, error) 返回值中的 error 转 panic
+//
+// 用途：当中间件构造期错误"理论上不可能发生"时，简化 init 代码
+//
+// 示例：
+//
+//	// 全局变量初始化
+//	var handler = chain.Must(chain.New(mw1, mw2).Then(app))
+func Must(h http.Handler, err error) http.Handler {
+	if err != nil {
+		panic(err)
+	}
+	return h
+}
+
+// MustThen 等价于 Must(c.Then(h))，链式调用更简洁
+//
+// 示例：
+//
+//	handler := chain.New(mw1, mw2).MustThen(app)
+func (c Chain) MustThen(h http.Handler) http.Handler {
+	return Must(c.Then(h))
 }

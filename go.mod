@@ -1,3 +1,3 @@
 module github.com/go-zeus/zeus
 
-go 1.20
+go 1.22

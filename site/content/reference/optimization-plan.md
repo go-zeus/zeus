@@ -1,0 +1,144 @@
+---
+title: 优化与路线图
+weight: 30
+---
+
+> 基于 go-zero / kratos / kitex / dapr / gin 等业界标杆框架的横向对比，识别 zeus 当前能力缺口并提出补充建议。
+
+## 一、能力对照矩阵
+
+| 维度 | go-zero | kratos | kitex | dapr | zeus 当前 | 评估 |
+|---|---|---|---|---|---|---|
+| 服务发现/注册 | ✓ | ✓ | ✓ | ✓ | ✓(memory/etcd) | 持平 |
+| 负载均衡 | ✓ | ✓ | ✓(高级) | ✓ | ✓(random/round_robin) | 持平 |
+| 熔断 | ✓ | ✓ | ✓ | ✗ | ✓(counter+cluster) | 领先 |
+| 限流 | ✓ | ✓ | ✓ | ✓ | ✓(token+cluster) | 领先 |
+| 重试 | ✓ | ✓ | ✓ | ✗ | ✓(exponential+cluster) | 领先 |
+| 链路追踪 | ✓OTel | ✓OTel | ✓OTel | ✓OTel | ✓OTel | 持平 |
+| 指标 | ✓Prom | ✓Prom | ✓Prom | ✓Prom | ✓Prom | 持平 |
+| 日志 | ✓ | ✓ | ✓ | ✓ | ✓slog | 持平 |
+| 反向代理 | ✗ | ✗ | ✗ | ✗ | ✓(HTTP/WS/SSE/gRPC) | **领先** |
+| 集群路由 | ✗ | ✗ | ✗ | ✗ | ✓(X-Zeus-Cluster) | **原创** |
+| 配置中心 | ✓ | ✓ | ✓ | ✓ | ✓(file/etcd/k8s) | 持平 |
+| MQ 抽象 | ✗ | ✗ | ✗ | ✓(BuildingBlock) | ✓(memory/kafka/nats) | 持平 |
+| 任务调度 | ✗ | ✗ | ✗ | ✗ | ✓(interval/cron) | **领先** |
+| 数据库抽象 | ✓sqlx | ✓(data) | ✗ | ✓ | ✓(sql/mysql/postgres) | 持平 |
+| 缓存抽象 | ✓ | ✓ | ✗ | ✓ | ✓(memory/redis) | 持平 |
+| 跨进程事务 | ✗ | ✗ | ✗ | ✓(workflow) | ✓(tx_id 透传) | **领先** |
+| **TLS / mTLS** | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ **已实现** |
+| **pprof 自动注册** | ✓ | ✓ | ✓ | ✗ | ✓ | ✅ **已实现** |
+| **业务错误码** | ✓ | ✓(errors) | ✓ | ✗ | ✓ | ✅ **已实现** |
+| **参数校验** | ✗ | ✗ | ✗ | ✗ | ✓ | ✅ **已实现** |
+| **通用 batch** | ✓ | ✗ | ✗ | ✗ | ✓ | ✅ **已实现** |
+| **分布式 ID** | ✓ | ✗ | ✗ | ✗ | ✓ | ✅ **已实现** |
+| **testutil** | ✓ | ✓ | ✗ | ✗ | ✓ | ✅ **已实现** |
+| **分页辅助** | ✗ | ✗ | ✗ | ✗ | ✓ | ✅ **已实现** |
+
+## 二、优化优先级
+
+### ✅ P0：生产硬伤（已完成）
+
+#### 1. TLS / mTLS 支持 ✅
+- **现状**：已完成
+  - `server/http.TLS(cfg *tls.Config) Option` — 服务端 HTTPS / mTLS
+  - `server/http.TLSFiles(certFile, keyFile string) Option` — 从文件加载证书
+  - `client.WithTLS(cfg *tls.Config) Option` — 客户端 TLS（含 mTLS）
+  - `client.WithTransport(rt http.RoundTripper) Option` — 自定义连接池
+- **测试**：`server/http/tls_test.go` 覆盖 4 个场景（默认/WithConfig/WithFiles/mTLS）
+- **用法**：
+  ```go
+  // HTTPS server
+  srv := http.NewHTTP(http.TLS(&tls.Config{Certificates: []tls.Certificate{cert}}))
+
+  // mTLS server（双向校验）
+  srv := http.NewHTTP(http.TLS(&tls.Config{
+      Certificates: []tls.Certificate{cert},
+      ClientAuth:   tls.RequireAndVerifyClientCert,
+      ClientCAs:    clientCAs,
+  }))
+
+  // HTTPS client
+  c := client.NewClient(client.WithTLS(&tls.Config{InsecureSkipVerify: true}))
+  ```
+
+#### 2. pprof 诊断端点自动注册 ✅
+- **现状**：已完成
+  - `app.WithPprof(port int) AppOption` — 独立端口的 pprof server
+  - 端点：`/debug/pprof/{cmdline,profile,symbol,trace,heap,goroutine,allocs,block,mutex}`
+  - **安全设计**：独立端口隔离（生产可在防火墙层屏蔽），不影响业务流量
+- **用法**：
+  ```go
+  a := app.NewApp(
+      app.AddServer(http.NewHTTP()),
+      app.WithPprof(6060), // pprof 独立端口
+  )
+  ```
+
+### ✅ P1：业务高频（已完成）
+
+#### 3. errors 包（Kratos 风格业务错误码）✅
+- **现状**：已实现 `errors/` 包
+- **API**：`errors.New(reason, msg, code)` / `errors.Is` / `errors.As` / `FromError`
+- **特性**：业务错误码 + HTTP 状态码映射 + Metadata
+
+#### 4. validation 泛型校验 ✅
+- **现状**：已实现 `validation/` 包
+- **API**：链式 `validation.New().Add(field, val, rules...).Validate()`
+- **规则**：Required / MinLen / MaxLen / Min / Max / Email / Regex 等
+
+#### 5. testutil 测试辅助 ✅
+- **现状**：已实现 `testutil/` 包
+- **API**：WaitUntil / NewMockRegistry / NewHTTPTestServer 等
+
+#### 6. snowflake 分布式 ID ✅
+- **现状**：已实现 `snowflake/` 包
+- **特性**：含时钟回拨保护
+
+### ✅ P2：增强（已完成）
+
+#### 7. batch 通用批处理 ✅
+- **现状**：已实现 `batch/` 包
+- **API**：`batch.New(maxSize, maxWait, do).Add(item)`
+- **用途**：DB bulk insert / HTTP 调用聚合
+
+#### 8. page 分页辅助 ✅
+- **现状**：已实现 `page/` 包
+- **API**：`page.Page` / `page.Sort` / `page.Result[T]`
+
+
+## 三、不补充的能力（与 zeus 哲学冲突）
+
+| 能力 | 原因 |
+|---|---|
+| API DSL / 代码生成（.api / .proto → server） | 违反"内部复杂 + 外部简单"原则；与 4 层渐进暴露冲突 |
+| ORM / Schema Migration | 业务工具域，与"薄封装 stdlib"原则冲突 |
+| Stream 抽象（RxGo 风格） | SSE/WebSocket 已覆盖实际场景 |
+| 分布式事务协调器 | 业务侧选 Seata/TCC/Saga，仅保留 tx_id 透传 |
+| Hot Reload | 配置热更已有（config 包），代码热更交给 air/reflex |
+| GraphQL / gRPC-Web | 按需补充，非主流 |
+
+## 四、实施路径
+
+```
+P0 阶段（生产硬伤）
+├─ server/http: TLS Option + 测试
+├─ client: TLS / Transport Option + 测试
+└─ app/options.go: WithPprof() Option + 测试
+
+P1 阶段（业务高频）
+├─ errors 包: Error 类型 + HTTP/gRPC 映射 + 测试
+├─ validation 包: 链式 API + 内置规则 + 测试
+├─ testutil 包: mock + builder + helper + 测试
+└─ utils/snowflake: Generator + 时钟回拨保护 + 测试
+
+P2 阶段（增强）
+├─ batch 包: Batcher + 测试
+└─ utils/page: Page + Sort + Filter + Result + 测试
+```
+
+## 五、与现有架构的兼容性
+
+- 所有新增功能都通过 Option 模式接入，不破坏 L1-L4 现有 API
+- 主仓零依赖原则不变（TLS 用标准库 crypto/tls；pprof 用 net/http/pprof）
+- 中文注释、Go 1.22+ 泛型、所有新代码必须有测试
+- 与 utils 包现有的工具集风格一致（命名、Option 模式、文档注释）

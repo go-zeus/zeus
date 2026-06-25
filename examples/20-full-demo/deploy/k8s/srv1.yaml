@@ -1,0 +1,119 @@
+# srv-1 用户认证：default + user.v1.1 + batch.v3 三个集群部署
+# srv1 不在 order.v2 部署 → order.v2 流量到达 srv1 时降级到 default
+#
+# === srv-1 default ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv1-default
+  namespace: zeus-demo
+  labels:
+    app: srv1
+    cluster: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: srv1
+      cluster: default
+  template:
+    metadata:
+      labels:
+        app: srv1
+        cluster: default
+    spec:
+      containers:
+        - name: srv1
+          image: zeus-srv1:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9001
+          env:
+            - name: CLUSTER
+              value: default
+            - name: PORT
+              value: "9001"
+            - name: GATEWAY_URL
+              value: http://gateway.zeus-demo.svc.cluster.local:8080
+          readinessProbe:
+            httpGet: { path: /health, port: 9001 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+# === srv-1 user.v1.1 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv1-user-v1-1
+  namespace: zeus-demo
+  labels:
+    app: srv1
+    cluster: user.v1.1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: srv1
+      cluster: user.v1.1
+  template:
+    metadata:
+      labels:
+        app: srv1
+        cluster: user.v1.1
+    spec:
+      containers:
+        - name: srv1
+          image: zeus-srv1:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9001
+          env:
+            - name: CLUSTER
+              value: user.v1.1
+            - name: PORT
+              value: "9001"
+            - name: GATEWAY_URL
+              value: http://gateway.zeus-demo.svc.cluster.local:8080
+          readinessProbe:
+            httpGet: { path: /health, port: 9001 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+# === srv-1 batch.v3 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv1-batch-v3
+  namespace: zeus-demo
+  labels:
+    app: srv1
+    cluster: batch.v3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: srv1
+      cluster: batch.v3
+  template:
+    metadata:
+      labels:
+        app: srv1
+        cluster: batch.v3
+    spec:
+      containers:
+        - name: srv1
+          image: zeus-srv1:latest
+          imagePullPolicy: Never
+          ports:
+            - containerPort: 9001
+          env:
+            - name: CLUSTER
+              value: batch.v3
+            - name: PORT
+              value: "9001"
+            - name: GATEWAY_URL
+              value: http://gateway.zeus-demo.svc.cluster.local:8080
+          readinessProbe:
+            httpGet: { path: /health, port: 9001 }
+            initialDelaySeconds: 2
+            periodSeconds: 5

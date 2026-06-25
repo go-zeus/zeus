@@ -1,0 +1,60 @@
+# srv-3 支付：default + batch.v3 两个集群部署
+# srv3 不在 user.v1.1 / order.v2 部署 → 这些集群流量到达 srv3 时降级到 default
+#
+# === srv-3 default ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv3-default
+  namespace: zeus-demo
+  labels: { app: srv3, cluster: default }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: srv3, cluster: default }
+  template:
+    metadata:
+      labels: { app: srv3, cluster: default }
+    spec:
+      containers:
+        - name: srv3
+          image: zeus-srv3:latest
+          imagePullPolicy: Never
+          ports: [{ containerPort: 9003 }]
+          env:
+            - { name: CLUSTER, value: default }
+            - { name: PORT, value: "9003" }
+            - { name: GATEWAY_URL, value: http://gateway.zeus-demo.svc.cluster.local:8080 }
+          readinessProbe:
+            httpGet: { path: /health, port: 9003 }
+            initialDelaySeconds: 2
+            periodSeconds: 5
+---
+# === srv-3 batch.v3 ===
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zeus-srv3-batch-v3
+  namespace: zeus-demo
+  labels: { app: srv3, cluster: batch.v3 }
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: srv3, cluster: batch.v3 }
+  template:
+    metadata:
+      labels: { app: srv3, cluster: batch.v3 }
+    spec:
+      containers:
+        - name: srv3
+          image: zeus-srv3:latest
+          imagePullPolicy: Never
+          ports: [{ containerPort: 9003 }]
+          env:
+            - { name: CLUSTER, value: batch.v3 }
+            - { name: PORT, value: "9003" }
+            - { name: GATEWAY_URL, value: http://gateway.zeus-demo.svc.cluster.local:8080 }
+          readinessProbe:
+            httpGet: { path: /health, port: 9003 }
+            initialDelaySeconds: 2
+            periodSeconds: 5

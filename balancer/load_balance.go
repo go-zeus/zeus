@@ -1,10 +1,9 @@
 package balancer
 
-import (
-	"github.com/go-zeus/zeus/types"
-)
+import "github.com/go-zeus/zeus/types"
 
-type LoadBalance interface {
+// Balancer 负载均衡器接口
+type Balancer interface {
 	Next() (*types.Instance, error)
-	Reload([]*types.Instance) LoadBalance
+	Reload([]*types.Instance) Balancer
 }

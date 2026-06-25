@@ -1,0 +1,12 @@
+# Hugo 构建产物
+/public/
+/resources/_gen/
+.hugo_build.lock
+
+# 主题（CI 中重新拉取，避免提交大文件）
+/themes/relearn/
+
+# IDE
+.idea/
+.vscode/
+*.swp

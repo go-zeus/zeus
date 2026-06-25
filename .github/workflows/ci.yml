@@ -1,0 +1,194 @@
+name: CI
+
+# Go 版本选择策略：
+#   - 主仓声明 go 1.22（兼容性下限），CI 默认用 Go 1.25 验证 plugins/examples
+#   - compatibility job 单独用 Go 1.22 验证主仓的兼容性承诺
+#   - 拆分原因：plugins/server/grpc 等模块强制要求 Go 1.25+，统一用 1.22 必失败
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Vet (main module)
+        run: go vet ./...
+      - name: Vet (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go vet ./...)
+          done
+
+  staticcheck:
+    # 静态分析：捕捉 vet 之外的潜在问题（unused、ineffectual assign、S1000+ 等）
+    # 用 Go 1.26：plugins/config/k8s 依赖 k8s.io/apimachinery v0.36+，强制要求 Go 1.26
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: false
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@latest
+      - name: Staticcheck (main module)
+        run: staticcheck ./...
+      - name: Staticcheck (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off staticcheck ./...)
+          done
+      - name: Staticcheck (examples)
+        run: |
+          for mod in $(find examples -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off staticcheck ./...)
+          done
+
+  govulncheck:
+    # 供应链安全扫描：检测直接/间接依赖是否含已知 CVE
+    # 不阻塞 PR：信息性输出，便于维护者跟踪
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Govulncheck (main module)
+        run: govulncheck ./...
+      - name: Govulncheck (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            echo "=== $(dirname "$mod") ==="
+            (cd "$(dirname "$mod")" && GOWORK=off govulncheck ./...) || true
+          done
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Test (main module)
+        # -v 输出便于定位失败用例；-timeout 防止单包挂死拖累整个 CI
+        run: go test -race -timeout=300s -v -coverprofile=coverage.out ./... 2>&1 | tee test.log
+      - name: Coverage
+        run: go tool cover -func=coverage.out
+      - name: Test (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go test -race -timeout=120s ./...)
+          done
+      - name: Upload test log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-log
+          path: test.log
+          retention-days: 7
+
+  integration:
+    # 集成测试：起 postgres + nats + mysql service container，跑插件端到端测试
+    # continue-on-error：Docker 拉镜像/容器初始化偶发失败不阻塞 PR
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      nats:
+        # NATS 镜像默认无 wget/curl，且监控端口需另行开启；
+        # 不指定 health-cmd，GitHub Actions 在容器启动后即视为就绪
+        image: nats:2.10
+        ports:
+          - 4222:4222
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: ""
+          MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+          MYSQL_DATABASE: test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 --silent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      ZEUS_POSTGRES_DSN: "host=127.0.0.1 port=5432 user=postgres password=postgres dbname=test sslmode=disable"
+      ZEUS_NATS_URL: "nats://127.0.0.1:4222"
+      ZEUS_MYSQL_DSN: "root:@tcp(127.0.0.1:3306)/test?parseTime=true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Wait for services
+        run: |
+          echo "Services should be ready via health checks; quick sleep to settle"
+          sleep 3
+      - name: Integration test (database/postgres)
+        run: |
+          cd plugins/database/postgres && GOWORK=off go test -race -timeout=60s -run EndToEnd ./...
+      - name: Integration test (database/mysql)
+        run: |
+          cd plugins/database/mysql && GOWORK=off go test -race -timeout=60s -run EndToEnd ./...
+      - name: Integration test (mq/nats)
+        run: |
+          cd plugins/mq/nats && GOWORK=off go test -race -timeout=60s -run "EndToEnd|BaggagePropagation|HandlerError" ./...
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Build (main module)
+        run: go build ./...
+      - name: Build (examples)
+        run: |
+          for mod in $(find examples -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go build ./...)
+          done
+      - name: Build (plugins)
+        run: |
+          for mod in $(find plugins -name go.mod -type f); do
+            (cd "$(dirname "$mod")" && GOWORK=off go build ./...)
+          done
+
+  compatibility:
+    # 主仓兼容性下限验证：用 Go 1.22 build 主仓，确保 go.mod 声明的下限可兑现
+    # 不跑测试（race test 需要 toolchain 与声明版本一致），只验证编译
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build main module with Go 1.22
+        run: go build ./...
+      - name: Vet main module with Go 1.22
+        run: go vet ./...

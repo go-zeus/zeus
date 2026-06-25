@@ -1,0 +1,137 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: #f5f7fa;
+  color: #2c3e50;
+  line-height: 1.6;
+  padding: 20px;
+}
+
+header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+header h1 { font-size: 28px; color: #1a2a3a; }
+header .subtitle { color: #6c7a89; font-size: 14px; margin-top: 4px; }
+
+main {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.panel {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.panel h2 {
+  font-size: 16px;
+  margin-bottom: 14px;
+  color: #1a2a3a;
+  border-left: 3px solid #4a90e2;
+  padding-left: 10px;
+}
+.panel.topology { grid-column: 1 / 3; }
+
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.btn {
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  transition: all 0.2s;
+}
+.btn:hover { transform: translateY(-1px); box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.btn-default   { background: #4a90e2; color: #fff; }
+.btn-user      { background: #e67e22; color: #fff; }
+.btn-order     { background: #16a085; color: #fff; }
+.btn-batch     { background: #9b59b6; color: #fff; }
+.btn-secondary { background: #95a5a6; color: #fff; }
+
+.auto-refresh { font-size: 13px; color: #6c7a89; display: block; margin-bottom: 10px; }
+
+.deploy-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  margin-top: 6px;
+}
+.deploy-matrix th, .deploy-matrix td {
+  border: 1px solid #e1e8ed;
+  padding: 4px 6px;
+  text-align: center;
+}
+.deploy-matrix thead th { background: #f8f9fa; color: #1a2a3a; font-weight: 600; }
+.deploy-matrix td:first-child { font-family: monospace; font-weight: 600; color: #1a2a3a; font-size: 11px; }
+.deploy-matrix td.yes { background: #e8f5e9; color: #2e7d32; font-weight: 600; }
+.deploy-matrix td.no  { background: #fafafa; color: #ccc; }
+
+.legend { display: flex; gap: 12px; margin-bottom: 10px; font-size: 12px; flex-wrap: wrap; }
+.legend > span { display: flex; align-items: center; gap: 5px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot-default  { background: #4a90e2; }
+.dot-user     { background: #e67e22; }
+.dot-order    { background: #16a085; }
+.dot-batch    { background: #9b59b6; }
+.dot-fallback { background: #95a5a6; }
+.dot-active   { background: #f39c12; box-shadow: 0 0 4px #f39c12; }
+
+#topology {
+  width: 100%;
+  height: 420px;
+  background: #fafbfc;
+  border: 1px solid #e1e8ed;
+  border-radius: 6px;
+}
+
+/* SVG 节点高亮 */
+#topology .node-active rect {
+  stroke: #f39c12;
+  stroke-width: 3.5;
+  filter: drop-shadow(0 0 6px #f39c12);
+}
+#topology .node-fallback rect {
+  stroke: #95a5a6;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px #95a5a6);
+}
+#topology .arrow-active {
+  opacity: 1 !important;
+  stroke-width: 3.5 !important;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+#trace-output {
+  background: #1e2933;
+  color: #e6e6e6;
+  padding: 14px;
+  border-radius: 6px;
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 12px;
+  max-height: 360px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+footer {
+  text-align: center;
+  margin-top: 30px;
+  color: #95a5a6;
+  font-size: 13px;
+}
+footer a { color: #4a90e2; text-decoration: none; }
+footer a:hover { text-decoration: underline; }

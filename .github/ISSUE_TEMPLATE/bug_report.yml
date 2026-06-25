@@ -1,0 +1,104 @@
+name: Bug 报告
+description: 报告 Zeus 的 bug（非安全漏洞）
+title: "[bug] "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你抽时间报告 bug！请尽量完整填写以下字段，帮助我们快速定位。
+
+        **安全漏洞请勿在此公开报告**，按 [SECURITY.md](https://github.com/go-zeus/zeus/blob/main/SECURITY.md) 流程私下披露。
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: 现象描述
+      description: 你观察到了什么？包括错误信息、异常行为等。
+      placeholder: "执行 xxx 后，预期 yyy，实际看到 zzz"
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你认为正确的行为应该是什么？
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 最小复现用例。如果可以，附上可运行的代码片段。
+      placeholder: |
+        1. go get github.com/go-zeus/zeus@latest
+        2. 编写如下代码：
+           ```go
+           ...
+           ```
+        3. 运行 `go run main.go`
+        4. 看到 ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: layer
+    attributes:
+      label: 涉及 API 层级
+      description: 你使用的是哪一层 API？（参考 [4 层渐进暴露](https://github.com/go-zeus/zeus/blob/main/CLAUDE.md#4-层渐进暴露-api)）
+      options:
+        - L1 (app.Run 快速入口)
+        - L2 (Config 配置驱动)
+        - L3 (app.NewApp 类型装配)
+        - L4 (components.NewApp 完全控制)
+        - plugins/* (第三方插件)
+        - 不确定
+    validations:
+      required: true
+
+  - type: input
+    id: zeus-version
+    attributes:
+      label: Zeus 版本
+      description: 运行 `go list -m github.com/go-zeus/zeus` 的输出
+      placeholder: "v0.0.0-20260623... 或具体版本"
+    validations:
+      required: true
+
+  - type: input
+    id: go-version
+    attributes:
+      label: Go 版本
+      description: 运行 `go version` 的输出
+      placeholder: "go1.22.0 darwin/arm64"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统
+      placeholder: "macOS 14.0 / Ubuntu 22.04 / Windows 11"
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: 相关日志
+      description: |
+        粘贴相关日志输出（先执行 `ZEUS_LOG_LEVEL=debug` 拿到更详细信息）。
+        日志中如包含敏感信息（IP/密码/token），请先脱敏。
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: 提交前自查
+      options:
+        - label: 我已搜索现有 Issues，确认这不是重复 issue
+          required: true
+        - label: 我已阅读 [CLAUDE.md](https://github.com/go-zeus/zeus/blob/main/CLAUDE.md) 中相关设计文档
+          required: true
+        - label: 我已用最新版本（`go get github.com/go-zeus/zeus@main`）验证问题依然存在
+          required: true

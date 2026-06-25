@@ -1,5 +1,29 @@
+go 1.25.0
+
+toolchain go1.25.0
 
 use (
-	examples
 	.
+	./examples/00-app-quickstart
+	./examples/01-hello
+	./examples/02-with-registry
+	./examples/03-typed
+	./examples/04-config-driven
+	./examples/05-autoapp
+	./examples/06-autoapp-full
+	./examples/07-autoapp-multi
+	./examples/08-client
+	./examples/09-middleware
+	./examples/10-config
+	./examples/11-proxy
+	./examples/12-cluster-routing
+	./examples/13-database
+	./examples/14-cache
+	./examples/15-mq
+	./examples/16-job
+	./examples/17-job-cron
+	./examples/18-propagation
+	./examples/19-observability
+	./examples/20-full-demo
+	./examples/21-registry-etcd
 )

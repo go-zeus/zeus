@@ -1,116 +1,112 @@
 package memory
 
 import (
-	"fmt"
+	"context"
+	"sync"
+
 	"github.com/go-zeus/zeus/registry"
 	"github.com/go-zeus/zeus/types"
-	"github.com/go-zeus/zeus/utils/event"
-	"sync"
 )
 
+// memory 内存注册中心实现，同时实现 Registrar 和 Discovery 接口
 type memory struct {
-	services map[string]*types.Service
+	services map[string]*types.ServiceEntry
 	mu       sync.RWMutex
-	e        event.Event
+	watchers map[chan struct{}]struct{} // watcher 集合（O(1) 注销）
+	wmu      sync.Mutex
+	closed   bool
 }
 
-func NewMemory() registry.Registry {
-	return &memory{services: map[string]*types.Service{}, e: event.NewEvent()}
+// New 创建内存注册中心实例，返回 registry.Registrar
+// 返回值同时实现了 registry.Discovery 接口
+func New() registry.Registrar {
+	return &memory{
+		services: map[string]*types.ServiceEntry{},
+		watchers: map[chan struct{}]struct{}{},
+	}
 }
 
-func (m *memory) Register(ins *types.Instance) (err error) {
+// NewMemory 创建内存注册中心实例（兼容旧代码）
+func NewMemory() registry.Registrar {
+	return New()
+}
+
+func (m *memory) Register(_ context.Context, ins *types.Instance) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.services[ins.Name]; !ok {
-		m.services[ins.Name] = types.NewService()
+		m.services[ins.Name] = types.NewServiceEntry()
 	}
-	m.services[ins.Name].AddInstance(ins)
+	// AddInstance 在重复 id 时返回 error，需向上传递（避免静默吞错）
+	if err := m.services[ins.Name].AddInstance(ins); err != nil {
+		return err
+	}
+	m.notifyWatchers()
 	return nil
 }
 
-func (m *memory) Deregister(ins *types.Instance) (err error) {
+func (m *memory) Deregister(_ context.Context, ins *types.Instance) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.services[ins.Name]; !ok {
-		return fmt.Errorf("服务[%s]不存在", ins.Name)
+		// 服务不存在视为已注销，幂等返回 nil（与 K8s delete 等行为一致）
+		return nil
 	}
 	m.services[ins.Name].DelInstance(ins)
+	m.notifyWatchers()
 	return nil
 }
 
-func (m *memory) Watch(serviceName string) <-chan struct{} {
-	return m.e.Watch()
-}
-
-func (m *memory) GetService(serviceName string) *types.Service {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.services[serviceName]
-}
-
-func (m *memory) GetCluster(serviceName, clusterName string) *types.Cluster {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	if service, ok := m.services[serviceName]; ok {
-		return service.Clusters[clusterName]
+// Watch 订阅服务变更事件，返回事件 channel 和注销函数
+// channel 在 registry 关闭时会被关闭（调用方应配合 ctx.Done() 使用）
+func (m *memory) Watch(_ context.Context, _ string) (<-chan struct{}, error) {
+	ch := make(chan struct{}, 1)
+	m.wmu.Lock()
+	if m.closed {
+		m.wmu.Unlock()
+		close(ch)
+		return ch, nil
 	}
-	return nil
+	m.watchers[ch] = struct{}{}
+	m.wmu.Unlock()
+	return ch, nil
 }
 
-func (m *memory) Reload(ins []*types.Instance) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.services = map[string]*types.Service{}
-	var errIds []string
-	for _, i := range ins {
-		err := m.Register(i)
-		if err != nil {
-			errIds = append(errIds, i.Id)
+// Close 关闭所有 watcher channel 并标记 registry 为已关闭
+// 调用方应在应用关闭时调用，避免 watcher goroutine 泄漏
+func (m *memory) Close() {
+	m.wmu.Lock()
+	defer m.wmu.Unlock()
+	if m.closed {
+		return
+	}
+	m.closed = true
+	for ch := range m.watchers {
+		close(ch)
+		delete(m.watchers, ch)
+	}
+}
+
+// notifyWatchers 通知所有 watcher，采用 fan-out 模式分发事件
+func (m *memory) notifyWatchers() {
+	m.wmu.Lock()
+	defer m.wmu.Unlock()
+	for ch := range m.watchers {
+		// 清空旧事件，确保最新一次触发能被接收
+		select {
+		case <-ch:
+		default:
+		}
+		// 非阻塞写入；watcher 已退出消费时丢弃事件，避免阻塞注册流程
+		select {
+		case ch <- struct{}{}:
+		default:
 		}
 	}
-	if len(errIds) > 0 {
-		return fmt.Errorf("instances[%v] reload 失败", errIds)
-	}
-	return nil
 }
 
-func (m *memory) AllService() []*types.Service {
+func (m *memory) GetService(_ context.Context, serviceName string) (*types.ServiceEntry, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	var services []*types.Service
-	for _, service := range m.services {
-		services = append(services, service)
-	}
-	return services
-}
-
-func (m *memory) AllServiceName() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	var serviceNames []string
-	for serviceName := range m.services {
-		serviceNames = append(serviceNames, serviceName)
-	}
-	return serviceNames
-}
-
-func (m *memory) AllClusterName(serviceName string) []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	service := m.GetService(serviceName)
-	if service == nil {
-		return []string{}
-	}
-	return service.AllClusterName()
-}
-
-func (m *memory) Exists(serviceName string) bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	_, ok := m.services[serviceName]
-	return ok
-}
-
-func (m *memory) String() string {
-	return "MemoryRegistry"
+	return m.services[serviceName], nil
 }

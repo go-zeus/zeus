@@ -1,0 +1,189 @@
+# Zeus 多 module 仓库自动 tag 发布
+#
+# 触发条件：
+#   - GitHub Release 页面发布新版本（手动操作，最常用）
+#   - 在 main 分支 push 一个 tag 形如 `release-v0.1.0`
+#
+# 工作流：
+#   维护者只需在 GitHub Release 页面填一个版本号（如 v0.1.0）
+#   本 workflow 自动：
+#     1. 给主仓打 tag v0.1.0
+#     2. 给所有 plugins/* 打 tag plugins/xxx/v0.1.0
+#     3. 给所有 examples/* 打 tag examples/xxx/v0.1.0
+#     4. 推送到远程
+#
+# 参考：opentelemetry-go / grpc-go / kratos 等多 module 仓库的标准做法
+
+name: Release
+
+on:
+  release:
+    types: [published]  # GitHub Release 发布时触发
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（如 v0.1.0）'
+        required: true
+        type: string
+      scope:
+        description: '打 tag 范围'
+        required: true
+        default: 'plugins'
+        type: choice
+        options:
+          - main        # 仅主仓
+          - plugins     # 主仓 + plugins（推荐）
+          - all         # 主仓 + plugins + examples
+
+permissions:
+  contents: write  # 推送 tag 必需
+
+jobs:
+  tag-release:
+    name: Tag all modules
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整历史，确保 git tag 操作正确
+
+      - name: Resolve version
+        id: ver
+        run: |
+          # 优先级：workflow_dispatch 输入 > release.tag_name
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${{ github.event.release.tag_name }}"
+          fi
+
+          # 校验格式
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Invalid version format: $VERSION (expected vX.Y.Z)"
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved version: $VERSION"
+
+      - name: Resolve scope
+        id: scope
+        run: |
+          # workflow_dispatch 输入优先；否则用默认 plugins
+          SCOPE="${{ inputs.scope || 'plugins' }}"
+          echo "scope=$SCOPE" >> $GITHUB_OUTPUT
+          echo "Scope: $SCOPE"
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Collect modules
+        id: modules
+        run: |
+          SCOPE="${{ steps.scope.outputs.scope }}"
+          MODULES=()
+
+          # 主仓（任何 scope 都包含）
+          MODULES+=("")
+
+          # plugins
+          if [[ "$SCOPE" == "plugins" || "$SCOPE" == "all" ]]; then
+            while IFS= read -r mod; do
+              MODULES+=("$(dirname "$mod")")
+            done < <(find plugins -name go.mod -type f | sort)
+          fi
+
+          # examples
+          if [[ "$SCOPE" == "all" ]]; then
+            while IFS= read -r mod; do
+              MODULES+=("$(dirname "$mod")")
+            done < <(find examples -maxdepth 2 -name go.mod -type f | sort)
+          fi
+
+          # 输出 JSON 数组（避免 IFS 问题）
+          {
+            echo "list<<EOF"
+            printf '%s\n' "${MODULES[@]}"
+            echo "EOF"
+          } >> $GITHUB_OUTPUT
+
+          echo "Total modules to tag: ${#MODULES[@]}"
+
+      - name: Create and push tags
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -e
+          VERSION="$VERSION"
+          CREATED=0
+          SKIPPED=0
+
+          while IFS= read -r mod; do
+            [ -z "$mod" ] && mod_path="(main)" || mod_path="$mod"
+            [ -z "$mod" ] && tag="$VERSION" || tag="$mod/$VERSION"
+
+            # 检查远程是否已存在该 tag
+            if git ls-remote --tags origin "refs/tags/$tag" 2>/dev/null | grep -q "$tag"; then
+              echo "SKIP  $tag  (already exists)"
+              SKIPPED=$((SKIPPED + 1))
+              continue
+            fi
+
+            # 创建 annotated tag
+            git tag -a "$tag" -m "Release $tag"
+            git push origin "refs/tags/$tag"
+
+            # 校验 module path 一致性
+            if [ -n "$mod" ]; then
+              declared=$(head -1 "$mod/go.mod" | awk '{print $2}')
+              expected="github.com/go-zeus/zeus/$mod"
+              if [ "$declared" != "$expected" ]; then
+                echo "::warning::$mod/go.mod declares '$declared' but expected '$expected'"
+              fi
+            fi
+
+            echo "OK    $tag"
+            CREATED=$((CREATED + 1))
+          done <<< "${{ steps.modules.outputs.list }}"
+
+          echo ""
+          echo "=== Summary ==="
+          echo "Created: $CREATED"
+          echo "Skipped: $SKIPPED"
+
+      - name: Comment on release
+        if: github.event_name == 'release'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ steps.ver.outputs.version }}';
+            const scope = '${{ steps.scope.outputs.scope }}';
+            const body = `## 🏷 Tags published
+
+            | Module | Tag |
+            |---|---|
+            | main | \`${version}\` |
+            ${scope === 'plugins' || scope === 'all' ? '| plugins/* | `plugins/<name>/' + version + '` |' : ''}
+            ${scope === 'all' ? '| examples/* | `examples/<name>/' + version + '` |' : ''}
+
+            ### Usage
+            \`\`\`bash
+            go get github.com/go-zeus/zeus@${version}
+            go get github.com/go-zeus/zeus/plugins/registry/etcd@${version}
+            \`\`\`
+
+            📦 pkg.go.dev will index within 10 minutes.
+            `;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.release.id,
+              body
+            });
+            // 注意：release 评论 API 用 discussions 或直接更新 release body 更合适
