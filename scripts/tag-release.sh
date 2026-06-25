@@ -2,10 +2,11 @@
 # Zeus 多 module 仓库一键打 tag 脚本
 #
 # 用法：
-#   ./scripts/tag-release.sh v0.1.0           # 打 v0.1.0 tag（主仓 + 21 plugins + 22 examples）
+#   ./scripts/tag-release.sh v0.1.0           # 打 v0.1.0 tag（主仓 + 21 plugins，默认）
 #   ./scripts/tag-release.sh v0.1.0 --dry-run # 预演（只打印，不实际打 tag）
 #   ./scripts/tag-release.sh v0.1.0 --main    # 只打主仓 tag
-#   ./scripts/tag-release.sh v0.1.0 --plugins # 主仓 + plugins
+#   ./scripts/tag-release.sh v0.1.0 --plugins # 主仓 + plugins（同默认行为，显式写法）
+#   ./scripts/tag-release.sh v0.1.0 --all     # 主仓 + plugins + examples（examples 通常无需打 tag）
 #   ./scripts/tag-release.sh v0.1.0 --delete  # 删除指定版本的所有 tag（含未推送）
 #
 # Go module 命名约定：
@@ -18,7 +19,7 @@ set -euo pipefail
 
 VERSION=""
 DRY_RUN=false
-SCOPE="all"        # all / main / plugins / main-plugins
+SCOPE="main-plugins"  # main-plugins（默认）/ main / all
 DELETE=false
 
 usage() {
@@ -31,14 +32,16 @@ usage() {
 选项:
   --dry-run      预演模式（只打印，不实际打 tag）
   --main         只打主仓 tag
-  --plugins      打主仓 + plugins tag（不打 examples）
+  --plugins      打主仓 + plugins tag（同默认，显式写法）
+  --all          打主仓 + plugins + examples（examples 通常无需打 tag）
   --delete       删除指定版本的所有本地 + 远程 tag（用于回滚）
   -h, --help     显示帮助
 
 示例:
-  $0 v0.1.0                    # 完整发布 v0.1.0
+  $0 v0.1.0                    # 默认：主仓 + plugins
   $0 v0.1.0 --dry-run          # 预演
-  $0 v0.1.0 --plugins          # 主仓 + plugins
+  $0 v0.1.0 --main             # 只打主仓
+  $0 v0.1.0 --all              # 包含 examples
   $0 v0.1.0 --delete           # 回滚 v0.1.0 的所有 tag
 EOF
     exit 0
@@ -50,6 +53,7 @@ while [[ $# -gt 0 ]]; do
         --dry-run)    DRY_RUN=true; shift ;;
         --main)       SCOPE="main"; shift ;;
         --plugins)    SCOPE="main-plugins"; shift ;;
+        --all)        SCOPE="all"; shift ;;
         --delete)     DELETE=true; shift ;;
         -h|--help)    usage ;;
         v*)           VERSION="$1"; shift ;;
