@@ -7,6 +7,11 @@ import (
 	"testing"
 )
 
+// uuidPattern 预编译正则，避免在循环中反复编译（SA6000）
+var uuidPattern = regexp.MustCompile(
+	`[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}`,
+)
+
 func TestGenerateUUID(t *testing.T) {
 	prev, err := GenerateUUID()
 	if err != nil {
@@ -21,10 +26,8 @@ func TestGenerateUUID(t *testing.T) {
 			t.Fatalf("Should get a new ID!")
 		}
 
-		matched, err := regexp.MatchString(
-			"[\\da-f]{8}-[\\da-f]{4}-[\\da-f]{4}-[\\da-f]{4}-[\\da-f]{12}", id)
-		if !matched || err != nil {
-			t.Fatalf("expected match %s %v %s", id, matched, err)
+		if !uuidPattern.MatchString(id) {
+			t.Fatalf("expected match %s", id)
 		}
 	}
 }

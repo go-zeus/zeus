@@ -1,5 +1,10 @@
 name: CI
 
+# Go 版本选择策略：
+#   - 主仓声明 go 1.22（兼容性下限），CI 默认用 Go 1.25 验证 plugins/examples
+#   - compatibility job 单独用 Go 1.22 验证主仓的兼容性承诺
+#   - 拆分原因：plugins/server/grpc 等模块强制要求 Go 1.25+，统一用 1.22 必失败
+
 on:
   push:
     branches: [main, dev]
@@ -13,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
       - name: Vet (main module)
         run: go vet ./...
       - name: Vet (plugins)
@@ -24,13 +29,13 @@ jobs:
 
   staticcheck:
     # 静态分析：捕捉 vet 之外的潜在问题（unused、ineffectual assign、S1000+ 等）
-    # 与 lint job 分开：staticcheck 失败不阻塞 vet 通过；可独立降级
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
+          cache: false
       - name: Install staticcheck
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
       - name: Staticcheck (main module)
@@ -48,14 +53,14 @@ jobs:
 
   govulncheck:
     # 供应链安全扫描：检测直接/间接依赖是否含已知 CVE
-    # 失败应阻塞发布，但 main 分支日常允许失败（用户可在 PR 上判断是否处理）
+    # 不阻塞 PR：信息性输出，便于维护者跟踪
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
       - name: Install govulncheck
         run: go install golang.org/x/vuln/cmd/govulncheck@latest
       - name: Govulncheck (main module)
@@ -73,7 +78,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
       - name: Test (main module)
         run: go test -race -coverprofile=coverage.out ./...
       - name: Coverage
@@ -86,7 +91,6 @@ jobs:
 
   integration:
     # 集成测试：起 postgres + nats + mysql service container，跑插件端到端测试
-    # 与 test job 分开：失败不阻塞核心测试通过
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -107,6 +111,7 @@ jobs:
         ports:
           - 4222:4222
         options: >-
+          --health-cmd "wget -qO- http://127.0.0.1:8222/healthz || exit 1"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -131,7 +136,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
+      - name: Wait for services
+        run: |
+          echo "Services should be ready via health checks; quick sleep to settle"
+          sleep 3
       - name: Integration test (database/postgres)
         run: |
           cd plugins/database/postgres && GOWORK=off go test -race -timeout=60s -run EndToEnd ./...
@@ -148,7 +157,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.25'
       - name: Build (main module)
         run: go build ./...
       - name: Build (examples)
@@ -161,3 +170,17 @@ jobs:
           for mod in $(find plugins -name go.mod -type f); do
             (cd "$(dirname "$mod")" && GOWORK=off go build ./...)
           done
+
+  compatibility:
+    # 主仓兼容性下限验证：用 Go 1.22 build 主仓，确保 go.mod 声明的下限可兑现
+    # 不跑测试（race test 需要 toolchain 与声明版本一致），只验证编译
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build main module with Go 1.22
+        run: go build ./...
+      - name: Vet main module with Go 1.22
+        run: go vet ./...

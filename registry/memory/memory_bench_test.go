@@ -8,21 +8,6 @@ import (
 	"github.com/go-zeus/zeus/types"
 )
 
-// makeServiceEntry 构造含 N 实例的服务
-func makeServiceEntry(n int) *types.ServiceEntry {
-	se := types.NewServiceEntry()
-	for i := 0; i < n; i++ {
-		_ = se.AddInstance(&types.Instance{
-			ID:      fmt.Sprintf("ins-%d", i),
-			Name:    "svc",
-			Cluster: "default",
-			IP:      "10.0.0.1",
-			Port:    8080 + i,
-		})
-	}
-	return se
-}
-
 // BenchmarkRegister 注册路径（写锁 + 通知 watcher）
 func BenchmarkRegister(b *testing.B) {
 	m := NewMemory().(*memory)

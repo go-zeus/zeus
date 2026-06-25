@@ -20,7 +20,6 @@ import (
 	"database/sql"
 	sqldriver "database/sql/driver"
 	"errors"
-	"fmt"
 	"io"
 	"sync"
 )
@@ -209,17 +208,4 @@ func (d *fakeDriver) resetCounters() {
 	defer d.mu.Unlock()
 	d.execCnt = 0
 	d.queryCnt = 0
-}
-
-// snapshotCounters 测试辅助：快照当前计数
-func (d *fakeDriver) snapshotCounters() (exec, query int) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.execCnt, d.queryCnt
-}
-
-// driverStats 测试辅助：返回可读字符串
-func (d *fakeDriver) stats() string {
-	exec, query := d.snapshotCounters()
-	return fmt.Sprintf("exec=%d query=%d", exec, query)
 }
