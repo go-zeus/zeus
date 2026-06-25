@@ -156,19 +156,25 @@ jobs:
           echo "Created: $CREATED"
           echo "Skipped: $SKIPPED"
 
-      - name: Comment on release
+      - name: Append tag summary to release
         if: github.event_name == 'release'
         uses: actions/github-script@v7
         with:
+          # 通过 updateRelease 把 tag 清单附加到 release body
+          # （GitHub 无原生 release comment API，issues.createComment + release.id 会 404）
           script: |
             const version = '${{ steps.ver.outputs.version }}';
             const scope = '${{ steps.scope.outputs.scope }}';
-            const body = `## 🏷 Tags published
+            const summary = `
+
+            ---
+
+            ## 🏷 Tags published
 
             | Module | Tag |
             |---|---|
             | main | \`${version}\` |
-            ${scope === 'plugins' || scope === 'all' ? '| plugins/* | `plugins/<name>/' + version + '` |' : ''}
+            ${(scope === 'plugins' || scope === 'all') ? '| plugins/* | `plugins/<name>/' + version + '` |' : ''}
             ${scope === 'all' ? '| examples/* | `examples/<name>/' + version + '` |' : ''}
 
             ### Usage
@@ -180,10 +186,9 @@ jobs:
             📦 pkg.go.dev will index within 10 minutes.
             `;
 
-            await github.rest.issues.createComment({
+            await github.rest.repos.updateRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.payload.release.id,
-              body
+              release_id: context.payload.release.id,
+              body: (context.payload.release.body || '') + summary
             });
-            // 注意：release 评论 API 用 discussions 或直接更新 release body 更合适
