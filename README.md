@@ -108,9 +108,9 @@ app.Run()
 | propagation | `propagation`（W3C Baggage 兼容） | — |
 | routing | `routing`（X-Zeus-Cluster 端到端路由） | — |
 | job | `job/interval`（固定间隔） | `plugins/job/cron`（cron 表达式） |
-| mq | `mq/memory`（进程内事件总线） | `plugins/mq/nats`（kafka/redis 待补） |
+| mq | `mq/memory`（进程内事件总线） | `plugins/mq/kafka`、`nats` |
 | database | `database/sql`（薄封装 stdlib） | `plugins/database/mysql`/`postgres` |
-| cache | `cache/memory`（TTL 双路径清理） | `plugins/cache/redis`（memcached 待补） |
+| cache | `cache/memory`（TTL 双路径清理） | `plugins/cache/redis` |
 
 ### URL scheme 切换实现
 
@@ -136,25 +136,28 @@ CI：`.github/workflows/ci.yml` — lint + test + build，覆盖主包和所有 
 
 ## 示例
 
+- [`examples/00-app-quickstart`](./examples/00-app-quickstart) — L4 手动装配（`components.NewApp`）
 - [`examples/01-hello`](./examples/01-hello) — **L1 入门（5 行）**
 - [`examples/02-with-registry`](./examples/02-with-registry) — L2 多集群路由
 - [`examples/03-typed`](./examples/03-typed) — **L3 类型装配**（双 Server + recovery middleware）
 - [`examples/04-config-driven`](./examples/04-config-driven) — L2 配置驱动（URL scheme 切 cache/mq）
+- [`examples/05-autoapp`](./examples/05-autoapp) — 自动装配最小示例
 - [`examples/06-autoapp-full`](./examples/06-autoapp-full) — L4 完整装配
 - [`examples/07-autoapp-multi`](./examples/07-autoapp-multi) — 多 server（HTTP + gRPC）
+- [`examples/08-client`](./examples/08-client) — HTTP 客户端（自动集群路由）
+- [`examples/09-middleware`](./examples/09-middleware) — 中间件链
+- [`examples/10-config`](./examples/10-config) — 配置加载（file loader）
+- [`examples/11-proxy`](./examples/11-proxy) — 反向代理（HTTP/WebSocket/SSE）
 - [`examples/12-cluster-routing`](./examples/12-cluster-routing) — 集群路由端到端演示
-- [`examples/19-observability`](./examples/19-observability) — metrics + trace + log
-- [`examples/18-propagation`](./examples/18-propagation) — Baggage 全链路传播
-- [`examples/14-cache`](./examples/14-cache) — 缓存抽象（Set/Get/TTL）
 - [`examples/13-database`](./examples/13-database) — 数据库抽象（事务 + tx_id 透传）
+- [`examples/14-cache`](./examples/14-cache) — 缓存抽象（Set/Get/TTL）
 - [`examples/15-mq`](./examples/15-mq) — 消息队列（pub/sub + baggage 透传）
 - [`examples/16-job`](./examples/16-job) — 任务调度（interval 固定间隔）
 - [`examples/17-job-cron`](./examples/17-job-cron) — 任务调度（cron 表达式）
-- [`examples/09-middleware`](./examples/09-middleware) — 中间件链
-- [`examples/11-proxy`](./examples/11-proxy) — 反向代理（HTTP/WebSocket/SSE）
-- [`examples/08-client`](./examples/08-client) — HTTP 客户端（自动集群路由）
-- [`examples/21-registry-etcd`](./examples/21-registry-etcd) — etcd 注册中心集成
+- [`examples/18-propagation`](./examples/18-propagation) — Baggage 全链路传播
+- [`examples/19-observability`](./examples/19-observability) — metrics + trace + log
 - [`examples/20-full-demo`](./examples/20-full-demo) — 综合演示（gateway + 多 srv + 前端）
+- [`examples/21-registry-etcd`](./examples/21-registry-etcd) — etcd 注册中心集成
 
 ## 社区
 

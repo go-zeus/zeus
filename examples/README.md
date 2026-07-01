@@ -1,27 +1,22 @@
 # Zeus Examples
 
-22 个独立可运行的示例，按 4 层渐进暴露 API 组织：
+22 个独立可运行的示例，按编号顺序组织（每条标注所属 API 层级）：
 
 | 示例 | 学习目标 |
 |---|---|
-| **L1 — 5 行启动** | |
-| [01-hello](01-hello/) | 最小 HTTP 服务，体验零配置启动 |
-| **L2 — 配置驱动** | |
-| [02-with-registry](02-with-registry/) | URL scheme 切换注册中心（memory / etcd） |
-| [04-config-driven](04-config-driven/) | URL scheme 切换 cache/database/mq |
-| [10-config](10-config/) | 配置加载（file loader） |
-| **L3 — 类型装配** | |
-| [03-typed](03-typed/) | `app.NewApp` + `WithXxx` Option 模式 |
-| [05-autoapp](05-autoapp/) | 自动装配最小示例 |
-| [06-autoapp-full](06-autoapp-full/) | 自动装配完整示例 |
-| [07-autoapp-multi](07-autoapp-multi/) | 多 Server 单 App（HTTP 双端口） |
+| [00-app-quickstart](00-app-quickstart/) | L4 `components.NewApp` 手动装配 |
+| [01-hello](01-hello/) | **L1 入门**：最小 HTTP 服务，体验零配置启动 |
+| [02-with-registry](02-with-registry/) | L2 URL scheme 切换注册中心（memory / etcd） |
+| [03-typed](03-typed/) | **L3 类型装配**：`app.NewApp` + `WithXxx` Option 模式 |
+| [04-config-driven](04-config-driven/) | L2 URL scheme 切换 cache/database/mq |
+| [05-autoapp](05-autoapp/) | L4 自动装配最小示例 |
+| [06-autoapp-full](06-autoapp-full/) | L4 自动装配完整示例 |
+| [07-autoapp-multi](07-autoapp-multi/) | L3 多 Server 单 App（HTTP 双端口） |
 | [08-client](08-client/) | HTTP 客户端 + 服务发现 + 集群路由 |
 | [09-middleware](09-middleware/) | 中间件链组合 |
+| [10-config](10-config/) | 配置加载（file loader） |
 | [11-proxy](11-proxy/) | 多协议反向代理（HTTP/WS/SSE） |
 | [12-cluster-routing](12-cluster-routing/) | X-Zeus-Cluster 端到端路由 |
-| **L4 — 完全控制** | |
-| [00-app-quickstart](00-app-quickstart/) | `components.NewApp` 手动装配 |
-| **功能域示例** | |
 | [13-database](13-database/) | database/sql + tx_id 透传 |
 | [14-cache](14-cache/) | cache/memory + TTL |
 | [15-mq](15-mq/) | mq/memory 进程内事件总线 |
@@ -29,9 +24,8 @@
 | [17-job-cron](17-job-cron/) | plugins/job/cron cron 表达式 |
 | [18-propagation](18-propagation/) | W3C Baggage 全链路传播 |
 | [19-observability](19-observability/) | metrics + trace + log 三件套 |
-| [21-registry-etcd](21-registry-etcd/) | plugins/registry/etcd |
-| **完整端到端** | |
 | [20-full-demo](20-full-demo/) | gateway + 3 srv + frontend 端到端演示 |
+| [21-registry-etcd](21-registry-etcd/) | plugins/registry/etcd |
 
 ## 使用方式
 
@@ -51,8 +45,8 @@ go run .
 | 示例 | 启动命令 | 访问 |
 |---|---|---|
 | [19-observability](19-observability/) | `docker compose -f examples/19-observability/docker-compose.yml up --build` | Grafana http://localhost:3000 (admin/admin)，Prometheus http://localhost:9090 |
-| [21-registry-etcd](21-registry-etcd/) | `docker compose -f examples/21-registry-etcd/docker-compose.yml up --build` | http://localhost:18080 |
 | [20-full-demo](20-full-demo/deploy/docker-compose.yml) | `docker compose -f examples/20-full-demo/deploy/docker-compose.yml up --build` | 前端 http://localhost:8088，gateway http://localhost:8080 |
+| [21-registry-etcd](21-registry-etcd/) | `docker compose -f examples/21-registry-etcd/docker-compose.yml up --build` | http://localhost:18080 |
 
 **单进程示例**（01-hello / 03-typed 等）没有 compose，但可用通用 Docker 命令启动：
 
