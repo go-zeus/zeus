@@ -3,8 +3,8 @@ module github.com/go-zeus/zeus/examples/21-registry-etcd
 go 1.25.0
 
 require (
-	github.com/go-zeus/zeus v0.0.0
-	github.com/go-zeus/zeus/plugins/registry/etcd v0.0.0
+	github.com/go-zeus/zeus v0.1.0
+	github.com/go-zeus/zeus/plugins/registry/etcd v0.1.0
 	go.etcd.io/etcd/client/v3 v3.6.12
 )
 
@@ -27,9 +27,4 @@ require (
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/grpc v1.79.3 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
-)
-
-replace (
-	github.com/go-zeus/zeus => ../../
-	github.com/go-zeus/zeus/plugins/registry/etcd => ../../plugins/registry/etcd
 )
