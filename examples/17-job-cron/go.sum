@@ -1,2 +1,6 @@
+github.com/go-zeus/zeus v0.1.0 h1:7ryIjG39hZr1X8AmNAFlQ5LwNMNOVXdG1oV+kQR4bvI=
+github.com/go-zeus/zeus v0.1.0/go.mod h1:diLwdJy6pxM6iWJfNkIhWPQi1H7wsnc7NoW+Y6h/hU0=
+github.com/go-zeus/zeus/plugins/job/cron v0.1.0 h1:B8Z26tDtIsiXIt6Jdz3syjZwV72Hby12MZ6RqIbIPJE=
+github.com/go-zeus/zeus/plugins/job/cron v0.1.0/go.mod h1:se4M9hj5I754nt+1YwKEWCQnM8DKdayBevc33Sbschc=
 github.com/robfig/cron/v3 v3.0.1 h1:WdRxkvbJztn8LMz/QEvLN5sBU+xKpSqwwUO1Pjr4qDs=
 github.com/robfig/cron/v3 v3.0.1/go.mod h1:eQICP3HwyT7UooqI/z+Ov+PtYAWygg1TEWWzGIFLtro=

@@ -3,11 +3,11 @@ module github.com/go-zeus/zeus/examples/19-observability
 go 1.25.0
 
 require (
-	github.com/go-zeus/zeus v0.0.0
-	github.com/go-zeus/zeus/plugins/metrics/prometheus v0.0.0
-	github.com/go-zeus/zeus/plugins/middleware/metrics v0.0.0
-	github.com/go-zeus/zeus/plugins/middleware/tracing v0.0.0
-	github.com/go-zeus/zeus/plugins/trace/otel v0.0.0
+	github.com/go-zeus/zeus v0.1.0
+	github.com/go-zeus/zeus/plugins/metrics/prometheus v0.1.0
+	github.com/go-zeus/zeus/plugins/middleware/metrics v0.1.0
+	github.com/go-zeus/zeus/plugins/middleware/tracing v0.1.0
+	github.com/go-zeus/zeus/plugins/trace/otel v0.1.0
 )
 
 require (
@@ -30,12 +30,4 @@ require (
 	go.yaml.in/yaml/v2 v2.4.2 // indirect
 	golang.org/x/sys v0.45.0 // indirect
 	google.golang.org/protobuf v1.36.10 // indirect
-)
-
-replace (
-	github.com/go-zeus/zeus => ../..
-	github.com/go-zeus/zeus/plugins/metrics/prometheus => ../../plugins/metrics/prometheus
-	github.com/go-zeus/zeus/plugins/middleware/metrics => ../../plugins/middleware/metrics
-	github.com/go-zeus/zeus/plugins/middleware/tracing => ../../plugins/middleware/tracing
-	github.com/go-zeus/zeus/plugins/trace/otel => ../../plugins/trace/otel
 )
