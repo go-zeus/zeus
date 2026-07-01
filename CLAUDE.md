@@ -185,9 +185,9 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | routing | — | `routing.WithCluster`/`FromContext`/`ClusterFromHTTPHeader` | `routing`（HTTP Header + gRPC metadata 统一抽象，对齐 K8s/Istio cluster 概念，底层基于 propagation） | — |
 | propagation | `Bag`/`Entry` | `propagation.With`/`Get`/`InjectHTTP`/`ExtractHTTP` | `propagation`（W3C Baggage 兼容的 K-V 上下文传播，零依赖） | — |
 | job | `Scheduler` + `Spec` | `job.Spec{Name, Every, Handler}` + `interval.New()` | `job/interval`（基于 time.Ticker 的固定间隔，零依赖） | `plugins/job/cron`（cron 表达式，基于 robfig/cron） |
-| mq | `Publisher`/`Subscriber`/`Broker` + `Message`/`Handler` | `mq.Message{Topic, Payload, Headers}` + `memory.New()` | `mq/memory`（基于 channel fan-out，无缓冲反压，零依赖） | `plugins/mq/kafka`/`nats`/`redis` 等（待补） |
-| database | `DB`/`Tx`/`Rows`/`Row` | `database.DBOptions` + `database.WithTx(ctx, tx)`/`FromTx(ctx)` | `database/sql`（薄封装 stdlib database/sql，自动 trace/metrics/tx_id） | `plugins/database/mysql`（postgres/memcached 待补） |
-| cache | `Cache` | `cache.Item{Key, Value, TTL}` + `cache.WithTTL(d)` | `cache/memory`（基于 sync.Map + TTL 双路径清理，零依赖） | `plugins/cache/redis`（memcached 待补） |
+| mq | `Publisher`/`Subscriber`/`Broker` + `Message`/`Handler` | `mq.Message{Topic, Payload, Headers}` + `memory.New()` | `mq/memory`（基于 channel fan-out，无缓冲反压，零依赖） | `plugins/mq/kafka`、`nats` |
+| database | `DB`/`Tx`/`Rows`/`Row` | `database.DBOptions` + `database.WithTx(ctx, tx)`/`FromTx(ctx)` | `database/sql`（薄封装 stdlib database/sql，自动 trace/metrics/tx_id） | `plugins/database/mysql`、`postgres`、`sqlite` |
+| cache | `Cache` | `cache.Item{Key, Value, TTL}` + `cache.WithTTL(d)` | `cache/memory`（基于 sync.Map + TTL 双路径清理，零依赖） | `plugins/cache/redis` |
 | client | `HTTPClient`（`type Client = HTTPClient` 别名兼容） | `client.NewClient`（HTTP 专用，自动集群路由 + baggage 传播） | `client` | `plugins/client/grpc`（独立抽象，自动注入 cluster metadata + baggage） |
 
 ### 构造与使用
