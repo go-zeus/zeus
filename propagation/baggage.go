@@ -98,13 +98,22 @@ func Decode(raw string) *Bag {
 	if raw == "" {
 		return nil
 	}
+	// 直接构造：不走 bag.With（每次 With 都 clone 整个 entries+index，
+	// N 个 entry 解码会退化成 O(N²) 拷贝）。
+	// 这里在构造期直接填充内部字段——bag 刚 New 出来、尚未被任何 ctx 引用，
+	// 直接修改是安全的；返回后即视为不可变（与 Bag 的不可变语义一致）。
 	bag := NewBag()
 	for _, item := range strings.Split(raw, ",") {
 		entry, ok := decodeEntry(item)
 		if !ok {
 			continue
 		}
-		bag = bag.With(entry.Key, entry.Value)
+		if idx, exists := bag.index[entry.Key]; exists {
+			bag.entries[idx] = entry // 同 Key 覆盖，保留原位置（与 With 一致）
+			continue
+		}
+		bag.index[entry.Key] = len(bag.entries)
+		bag.entries = append(bag.entries, entry)
 	}
 	if bag.Len() == 0 {
 		return nil
