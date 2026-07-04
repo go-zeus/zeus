@@ -190,6 +190,20 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | cache | `Cache` | `cache.Item{Key, Value, TTL}` + `cache.WithTTL(d)` | `cache/memory`（基于 sync.Map + TTL 双路径清理，零依赖） | `plugins/cache/redis` |
 | client | `HTTPClient`（`type Client = HTTPClient` 别名兼容） | `client.NewClient`（HTTP 专用，自动集群路由 + baggage 传播） | `client` | `plugins/client/grpc`（独立抽象，自动注入 cluster metadata + baggage） |
 
+### 通用工具包（无 plugins，零依赖）
+
+与上述功能域不同，以下包是**纯工具型**（无接口抽象层、无第三方实现、不在 plugins 下），直接导出构造函数或类型供业务使用：
+
+| 包 | 用户 API | 说明 |
+|---|---|---|
+| batch | `batch.New[T](handler, WithMaxBatchSize(n), WithMaxWait(d))` → `Batcher[T].Add/TryAdd/Flush/Close` | 泛型批处理：双触发（最大批量 + 最大等待时间），线程安全，Flush 残留批次优雅关闭。用于 DB 批量插入 / 日志批量写入 |
+| page | `page.Request`（Page/Size/Sort）→ `Normalize()` + `Offset()/Limit()`；`page.Paginate[T](req, items)` → `Response[T]` | 泛型分页 + 排序辅助：page<1→1、size 超界自动校正。用于 HTTP API 分页 / LIMIT-OFFSET 包装 |
+| validation | `validation.New()` 链式校验 | 轻量级链式校验（字段规则 + 错误聚合），反射兜底仅用于类型断言未覆盖场景 |
+| snowflake | `snowflake.New(machineID)` / `MustNew` → `Node.Next()` / `MustNext()`；`Parse(id)` 反解 | Twitter Snowflake 分布式 ID 生成器：趋势递增、时钟回拨保护、单机 409.6 万/s |
+| errors | `errors.New(reason, message, code)` / `Newf` / `FromError(err)` | Kratos 风格业务错误码：reason+message+code+metadata，HTTP/gRPC 双协议自动映射，兼容标准 `errors.Is/As` |
+| metadata | `metadata.MD`（`map[string]string`） + `metadata.NewContext`/`FromContext`/`Get`/`Set`/`Delete`/`MergeContext`/`Copy` | 请求级 K-V 元数据（context 传递，单 context 无锁）；与 propagation 的区别：metadata 是进程内 context 值，不跨进程透传 |
+| safe | `safe.GO(func() error)` | 带 panic 恢复的 goroutine 启动器（避免单 goroutine panic 拖垮进程） |
+
 ### 构造与使用
 
 ```go
