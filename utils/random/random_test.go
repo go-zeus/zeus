@@ -100,12 +100,17 @@ func TestMustRangeRand_OK(t *testing.T) {
 
 // TestRangeRand_Distribution 均匀分布（拒绝采样的核心验证）
 //
-// 生成 N 个 [0, 3] 内的数，统计频次，每个值的占比应接近 25%（±2% 容差）
+// 生成 N 个 [0, 3] 内的数，统计频次，每个值的占比应接近 25%。
+//
+// 容差选择：N=40000 时单桶标准差 σ≈√(N·p·(1-p))≈86.6。
+//   - ±2% (=±200≈2.3σ)：单桶越界概率 ~2%，4 桶联合后 CI 必然偶发失败（实测 flaky）
+//   - ±3% (=±300≈3.5σ)：单桶越界概率 ~0.02%，4 桶联合 <0.1%，可视为确定性通过
+// crypto/rand 不可播种，无法靠固定种子消除波动，故用统计学上足够稳的容差。
 func TestRangeRand_Distribution(t *testing.T) {
 	const (
 		min, max = 0, 3
 		N        = 40000
-		tol      = 0.02 // 2% 容差
+		tol      = 0.03 // 3% 容差（见上方说明，避免 crypto/rand 不可播种导致的 flaky）
 	)
 	counts := [4]int{}
 	for i := 0; i < N; i++ {
