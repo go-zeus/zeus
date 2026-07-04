@@ -5,9 +5,8 @@
 // 用户在 L1/L2/L3 配置中传入：
 //
 //	"memory://?buffer=128"               → mq/memory（进程内事件总线）
-//	"kafka://host:9092?group=g1"          → plugins/mq/kafka（待补）
-//	"nats://host:4222"                    → plugins/mq/nats（待补）
-//	"redis://host:6379/0?stream=orders"   → plugins/mq/redis（待补）
+//	"kafka://host:9092?group=g1"          → plugins/mq/kafka（需 import _ 该包）
+//	"nats://host:4222"                    → plugins/mq/nats（需 import _ 该包）
 //
 // plugins 在 init() 中调用 mq.RegisterResolver 注册自己的 scheme。
 

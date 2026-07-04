@@ -6,7 +6,6 @@
 //
 //	"memory://?cleanup=60s"      → cache/memory
 //	"redis://127.0.0.1:6379/0"   → plugins/cache/redis（需 import _ 该包）
-//	"memcached://127.0.0.1:11211" → plugins/cache/memcached（待补）
 //
 // plugins 在 init() 中调用 cache.RegisterResolver 注册自己的 scheme，
 // 主包零依赖（不直接 import plugins/cache/redis 等第三方包）。

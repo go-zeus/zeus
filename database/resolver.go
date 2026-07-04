@@ -5,8 +5,8 @@
 // 用户在 L1/L2/L3 配置中传入：
 //
 //	"mysql://user:pass@host:3306/db?pool=50&lifetime=30m"
-//	"postgres://user:pass@host:5432/db?sslmode=disable"   （需 plugins/database/postgres，待补）
-//	"sqlite3://file.db"                                    （待补）
+//	"postgres://user:pass@host:5432/db?sslmode=disable"   （需 import _ plugins/database/postgres）
+//	"sqlite://file.db"                                    （需 import _ plugins/database/sqlite；scheme 为 sqlite，非 sqlite3）
 //
 // 与 cache.NewFromURL 的差异：database resolver 需要额外的 tracer/meter 依赖注入，
 // 因此 Resolver 签名多了这两个参数。URL 不承担依赖注入职责。
