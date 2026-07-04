@@ -379,6 +379,10 @@ server/http 内置健康检查端点（使用 DefaultHandler 时自动注册）�
 - `GET /health/ready` — 调用 HealthChecker.IsReady()
 - `GET /health/live` — 调用 HealthChecker.IsAlive()
 
+plugins/server/grpc 默认注册 gRPC 标准 Health Checking Protocol（`grpc.health.v1`），整体服务状态返回 `SERVING`，供 K8s grpc probe 调用：
+- `NewGRPC` 默认开启，`WithoutHealth()` 关闭
+- `FromGRPC` 默认关闭（用户 server 可能已自注册，避免重复注册 panic），`WithHealth()` 开启
+
 ## 数据模型
 
 注册中心三层模型（对齐 K8s Endpoints + Istio ServiceEntry）：

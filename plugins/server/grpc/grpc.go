@@ -4,6 +4,7 @@
 //   - 默认 UnaryServerInterceptor：从 metadata["x-zeus-cluster"] 提取集群标记注入 context
 //   - 支持 Register(func(*grpc.Server)) 注册业务 Service
 //   - 支持自定义 UnaryServerInterceptor 链
+//   - 默认注册 gRPC Health Checking Protocol（grpc.health.v1），对齐 server/http 的 /health
 //   - graceful shutdown（监听 ctx 取消）
 //
 // 用法 1（L3 装配）：
@@ -45,6 +46,8 @@ import (
 	"github.com/go-zeus/zeus/routing"
 	"github.com/go-zeus/zeus/server"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	grpcmeta "google.golang.org/grpc/metadata"
 )
 
@@ -104,6 +107,24 @@ func WithoutAutoClustering() Option {
 	return func(s *grpcServer) { s.autoClustering = false }
 }
 
+// WithoutHealth 关闭默认注册的 gRPC Health Checking Protocol 服务（grpc.health.v1）。
+//
+// 仅 NewGRPC 路径需要（默认已开启）。FromGRPC 路径默认关闭，用 WithHealth 开启。
+func WithoutHealth() Option {
+	return func(s *grpcServer) { s.healthEnabled = false }
+}
+
+// WithHealth 开启 gRPC Health Checking Protocol 服务注册（grpc.health.v1）。
+//
+// 仅 FromGRPC 路径需要（默认关闭，因用户提供的 *grpc.Server 可能已自行注册 health，
+// 默认开会导致重复注册 panic）。NewGRPC 路径默认已开启。
+//
+// 开启后，整体服务状态（service name ""）固定返回 SERVING，可供 K8s livenessProbe /
+// readinessProbe 的 grpc 健康检查调用。
+func WithHealth() Option {
+	return func(s *grpcServer) { s.healthEnabled = true }
+}
+
 // grpcServer gRPC 服务器实现
 type grpcServer struct {
 	ip               string
@@ -111,6 +132,7 @@ type grpcServer struct {
 	registers        []func(*grpc.Server)
 	userInterceptors []grpc.UnaryServerInterceptor
 	autoClustering   bool
+	healthEnabled    bool
 
 	// ownerProvided 标记 *grpc.Server 是否由用户提供。
 	// true 时 Start 跳过 grpc.NewServer 和 registers 调用，
@@ -134,6 +156,7 @@ func NewGRPC(opts ...Option) server.Server {
 	s := &grpcServer{
 		port:           DefaultPort,
 		autoClustering: true,
+		healthEnabled:  true,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -159,6 +182,7 @@ func FromGRPC(srv *grpc.Server, opts ...Option) server.Server {
 	s := &grpcServer{
 		port:           DefaultPort,
 		autoClustering: false, // 用户 *grpc.Server 已经有自己的链，不再叠加
+		healthEnabled:  false, // 用户 server 可能已注册 health，默认关闭避免重复注册 panic
 		server:         srv,
 		ownerProvided:  true,
 	}
@@ -203,6 +227,14 @@ func (s *grpcServer) Start(ctx context.Context) error {
 		for _, reg := range s.registers {
 			reg(srv)
 		}
+	}
+
+	// 注册 gRPC Health Checking Protocol（对齐 server/http 的 /health）。
+	// 放在业务 service 注册之后：整体状态（""）固定 SERVING，供 K8s grpc probe 调用。
+	if s.healthEnabled {
+		hs := health.NewServer()
+		hs.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+		healthpb.RegisterHealthServer(srv, hs)
 	}
 
 	// 监听 ctx 取消以优雅关闭
