@@ -65,6 +65,12 @@ type cacheImpl struct {
 	name      string
 	recordKey bool // 是否在 span attrs 中记录 key（默认 false，避免敏感数据）
 
+	// traceEnabled/metricsEnabled 在 New 时按"注入的 tracer/meter 是否为 noop"探测：
+	// noop（默认装配）时跳过 span/labels 构造，避免热路径分配；
+	// 注入真实实现（otel/prometheus）时正常埋点。
+	traceEnabled  bool
+	metricsEnabled bool
+
 	cleanupInterval time.Duration // 后台清理周期
 	stop            chan struct{} // 通知后台 goroutine 退出
 	done            chan struct{} // cleaner goroutine 退出后关闭（用于测试同步）
@@ -136,6 +142,11 @@ func New(opts ...Option) cache.Cache {
 			opt(c)
 		}
 	}
+	// 探测注入的 tracer/meter 是否为 noop：noop 时跳过 span/labels 构造，
+	// 避免默认装配路径（L1/L2）每次操作的 alloc 浪费。
+	// 注入真实 tracer/meter（如 otel/prometheus）时 traceEnabled/metricsEnabled=true，正常埋点。
+	c.traceEnabled = !tnoop.IsNoop(c.tracer)
+	c.metricsEnabled = !mnoop.IsNoop(c.meter)
 	c.startCleaner()
 	return c
 }
@@ -263,6 +274,10 @@ func (c *cacheImpl) cleanupExpired() {
 
 // startSpan 创建带 attrs 的 span
 func (c *cacheImpl) startSpan(ctx context.Context, name, key string) (context.Context, trace.Span) {
+	if !c.traceEnabled {
+		// noop tracer：直接返回共享 noop Span，零分配（跳过 attrs map + 闭包构造）
+		return ctx, tnoop.Span
+	}
 	attrs := map[string]string{"cache": c.name}
 	if c.recordKey {
 		attrs["cache_key"] = key
@@ -275,6 +290,10 @@ func (c *cacheImpl) startSpan(ctx context.Context, name, key string) (context.Co
 //
 // status: "hit"/"miss"（Get）；"ok"（Set/Delete/Has）
 func (c *cacheImpl) recordMetric(op, status string, dur time.Duration) {
+	if !c.metricsEnabled {
+		// noop meter：跳过 labels map 构造 + Counter/Histogram 调用，零分配
+		return
+	}
 	labels := map[string]string{"cache": c.name, "op": op, "status": status}
 	c.meter.Counter(metricCacheOpTotal, labels).Inc()
 	c.meter.Histogram(metricCacheOpDuration, map[string]string{"cache": c.name, "op": op}).Observe(dur.Seconds())
