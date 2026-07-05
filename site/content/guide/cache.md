@@ -64,4 +64,4 @@ payload, _ := json.Marshal(user)
 _ = c.Set(ctx, "user:1", payload, cache.WithTTL(5*time.Minute))
 ```
 
-完整示例参见 `examples/cache/`：Set/Get/Has/Delete/TTL 过期。
+完整示例参见 `examples/14-cache/`：Set/Get/Has/Delete/TTL 过期。

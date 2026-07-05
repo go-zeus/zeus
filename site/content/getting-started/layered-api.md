@@ -93,7 +93,7 @@ a := app.NewApp(
 
 ## 与 L1 的关键差异
 
-- L1 自动包装 recovery/requestID/log/health/metrics 中间件；L3/L4 **不自动包装**
+- L1 自动包装 `requestid → accesslog → recovery` 中间件（注：`/health` 是路由端点而非中间件；`/metrics` 非默认装配，需 L3 `WithMeter` 启用）；L3/L4 **不自动包装**
 - 原因：L3/L4 用户已直接构造 Server，对中间件链有完全控制
 - L3/L4 默认链需用户显式：`WithMiddleware(recovery.New())`
 

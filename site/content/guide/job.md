@@ -82,5 +82,5 @@ job.Spec{
 ```
 
 完整示例：
-- `examples/job/`：interval 调度器 + 3 个 Job + ErrorHandler 告警钩子
-- `examples/job-cron/`：cron 调度器 + URL scheme
+- `examples/16-job/`：interval 调度器 + 3 个 Job + ErrorHandler 告警钩子
+- `examples/17-job-cron/`：cron 调度器 + URL scheme

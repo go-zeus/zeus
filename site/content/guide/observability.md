@@ -66,4 +66,4 @@ chain := middleware.NewChain(recovery.New(), tracingmw.New(tracer), metricsmw.Ne
 | `metrics` 中间件 | label `cluster` | 默认不加（避免基数爆炸，`WithBaggageLabels` 显式声明） |
 | `log` 包 | Field `cluster`（仅非 default） | 每个 baggage entry 一个 Field |
 
-完整端到端示例参见 `examples/observability/`。
+完整端到端示例参见 `examples/19-observability/`（含 docker-compose：Jaeger + Prometheus + Grafana）。

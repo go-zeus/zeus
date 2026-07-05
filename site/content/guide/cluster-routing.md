@@ -75,7 +75,7 @@ r := cr.NewRetriever(ctx)
 
 ## 完整示例
 
-参见 `examples/cluster_routing/`：单进程演示 gateway → srv1 → srv2 多 cluster 路由 + cluster 全链路传播。
+参见 `examples/12-cluster-routing/`：单进程演示 gateway → srv1 → srv2 多 cluster 路由 + cluster 全链路传播。
 
 ```bash
 curl http://localhost:8081/ping                                # default 链路

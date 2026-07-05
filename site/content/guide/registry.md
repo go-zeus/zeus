@@ -39,7 +39,7 @@ L2 用户通过 URL 字符串切换实现：
 |---|---|
 | `memory://` | `registry/memory` |
 | `etcd://` | `plugins/registry/etcd` |
-| `nacos://` | `plugins/registry/nacos`（待补） |
+| `nacos://` | `plugins/registry/nacos` |
 
 ```go
 app.Run(&app.Config{

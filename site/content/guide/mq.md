@@ -61,4 +61,4 @@ app.Run()
 | `handler` 入口 | 自动 `ExtractMetadata(ctx, msg.Headers)`：`msg.Headers["baggage"]` → handler ctx |
 | `Handler` 内读取 | `propagation.Get(ctx, "tenant.id")` 直接拿到 |
 
-完整示例参见 `examples/mq/`：3 个订阅者（不同 topic）+ baggage 全链路传播 + 优雅关闭。
+完整示例参见 `examples/15-mq/`：3 个订阅者（不同 topic）+ baggage 全链路传播 + 优雅关闭。
