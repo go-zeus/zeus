@@ -300,17 +300,20 @@ func TestNATS_BaggagePropagation(t *testing.T) {
 
 // TestNATS_HandlerError handler 返回 error 走 ErrorHandler
 func TestNATS_HandlerError(t *testing.T) {
-	var (
-		errCount int32
-		errTopic string
-	)
+	var errCount int32
+	// 用 buffered channel 传递 errHandler 收到的 topic，建立 happens-before
+	// （之前 errTopic 是裸 string，handler goroutine 写、测试 goroutine 读 → data race）
+	errCh := make(chan string, 1)
 
 	b, err := New(
 		WithURL(envOrDefault("ZEUS_NATS_URL", "nats://127.0.0.1:4222")),
 		WithConnectTimeout(1*time.Second),
 		WithErrorHandler(func(topic string, _ *mq.Message, _ error) {
 			atomic.AddInt32(&errCount, 1)
-			errTopic = topic
+			select {
+			case errCh <- topic:
+			default: // 防止 errHandler 多次调用阻塞
+			}
 		}),
 	)
 	if err != nil {
@@ -319,28 +322,25 @@ func TestNATS_HandlerError(t *testing.T) {
 	}
 	defer b.Close()
 
-	done := make(chan struct{})
 	_ = b.Subscribe(context.Background(), "zeus.test.error", func(_ context.Context, _ *mq.Message) error {
-		defer close(done)
 		return errors.New("simulated failure")
 	})
 
 	time.Sleep(100 * time.Millisecond)
 	_ = b.Publish(context.Background(), "zeus.test.error", &mq.Message{Payload: []byte("x")})
 
+	// 等 ErrorHandler 被调用（channel 收发建立 happens-before，无 race）
 	select {
-	case <-done:
+	case got := <-errCh:
+		if got != "zeus.test.error" {
+			t.Errorf("errTopic = %q, want zeus.test.error", got)
+		}
 	case <-time.After(3 * time.Second):
-		t.Fatal("handler not called within 3s")
+		t.Fatal("errHandler not called within 3s")
 	}
 
-	// 等 ErrorHandler 被调用
-	time.Sleep(100 * time.Millisecond)
 	if atomic.LoadInt32(&errCount) != 1 {
 		t.Errorf("errCount = %d, want 1", errCount)
-	}
-	if errTopic != "zeus.test.error" {
-		t.Errorf("errTopic = %q, want zeus.test.error", errTopic)
 	}
 }
 

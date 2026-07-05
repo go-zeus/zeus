@@ -240,9 +240,11 @@ func (b *broker) Subscribe(_ context.Context, subject string, handler mq.Handler
 	b.wg.Add(1)
 	sub, err := b.conn.Subscribe(subject, func(nmsg *nats.Msg) {
 		msg := natsMsgToMQ(nmsg)
-		// 自动 extract baggage 到 ctx（从 NATS Header "Baggage" 字段解析）
+		// 自动 extract baggage 到 ctx（从 NATS Header "Baggage" 字段解析）。
+		// map key 必须用 MetadataBaggage（"baggage"）—— ExtractMetadata 内部读这个 key；
+		// 若用 baggageHeader（"Baggage"）大小写不匹配，extract 会静默失败，baggage 丢失。
 		handlerCtx := propagation.ExtractMetadata(b.rootCtx, map[string]string{
-			baggageHeader: nmsg.Header.Get(baggageHeader),
+			propagation.MetadataBaggage: nmsg.Header.Get(baggageHeader),
 		})
 		if err := handler(handlerCtx, msg); err != nil {
 			b.errHandler(subject, msg, err)
