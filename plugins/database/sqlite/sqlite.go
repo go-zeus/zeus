@@ -82,19 +82,35 @@ func New(opts database.DBOptions, t trace.Tracer, m metrics.Meter) (database.DB,
 
 // BuildDSN 构造 SQLite DSN 字符串
 //
-// 格式：file:path/to/db?param1=value1&param2=value2
+// 格式：file:path/to/db?mode=<mode>&_pragma=...
 //
-// 行为：
-//   - path 为空时返回错误
-//   - 自动追加默认参数：
-//     _pragma=busy_timeout(5000)  等 5s 而非立刻 SQLITE_BUSY
-//     _pragma=foreign_keys(1)     启用外键约束（默认关闭）
-//     _pragma=journal_mode(WAL)   WAL 模式，提升读并发
+// flag 控制文件打开模式（映射为 SQLite URI 的 mode 参数，见
+// https://www.sqlite.org/uri.html）：
+//   - OpenReadOnly        → mode=ro  （只读，文件须已存在）
+//   - OpenReadWrite       → mode=rw  （读写，文件须已存在）
+//   - OpenReadWriteCreate → mode=rwc （读写 + 不存在则创建，默认）
+//
+// 自动追加默认 pragma：
+//   - busy_timeout(5000)  等 5s 而非立刻 SQLITE_BUSY
+//   - foreign_keys(1)     启用外键约束（默认关闭）
+//   - journal_mode(WAL)   WAL 模式，提升读并发
 func BuildDSN(path string, flag OpenFlag) string {
 	if path == "" {
 		return ""
 	}
-	return fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)", path)
+	return fmt.Sprintf("file:%s?mode=%s&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)", path, modeFromFlag(flag))
+}
+
+// modeFromFlag 把 OpenFlag 映射为 SQLite URI mode 参数
+func modeFromFlag(flag OpenFlag) string {
+	switch flag {
+	case OpenReadOnly:
+		return "ro"
+	case OpenReadWrite:
+		return "rw"
+	default: // OpenReadWriteCreate(6) 及未识别值
+		return "rwc"
+	}
 }
 
 // BuildMemoryDSN 构造内存数据库 DSN（用于单测 / 临时缓存）

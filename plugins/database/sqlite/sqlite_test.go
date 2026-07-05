@@ -16,8 +16,8 @@ func TestParseURL_FilePath(t *testing.T) {
 	if opts.DSN == "" {
 		t.Error("DSN should not be empty")
 	}
-	if opts.DSN != "file:test.db?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)" {
-		t.Errorf("DSN = %q, want file:test.db?...", opts.DSN)
+	if opts.DSN != "file:test.db?mode=rwc&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)" {
+		t.Errorf("DSN = %q, want file:test.db?mode=rwc&...", opts.DSN)
 	}
 }
 
@@ -31,7 +31,7 @@ func TestParseURL_NestedPath(t *testing.T) {
 		t.Error("DSN should not be empty")
 	}
 	// 期望 path/to/data.db
-	if opts.DSN != "file:path/to/data.db?_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)" {
+	if opts.DSN != "file:path/to/data.db?mode=rwc&_pragma=busy_timeout(5000)&_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)" {
 		t.Errorf("DSN = %q", opts.DSN)
 	}
 }
@@ -115,6 +115,24 @@ func TestBuildDSN_WALPragmas(t *testing.T) {
 	for _, want := range []string{"file:test.db", "busy_timeout(5000)", "foreign_keys(1)", "journal_mode(WAL)"} {
 		if !contains(dsn, want) {
 			t.Errorf("DSN %q missing %q", dsn, want)
+		}
+	}
+}
+
+// TestBuildDSN_FlagModes flag 参数映射为 SQLite URI mode
+func TestBuildDSN_FlagModes(t *testing.T) {
+	cases := []struct {
+		flag OpenFlag
+		want string
+	}{
+		{OpenReadOnly, "mode=ro"},
+		{OpenReadWrite, "mode=rw"},
+		{OpenReadWriteCreate, "mode=rwc"},
+	}
+	for _, tc := range cases {
+		dsn := BuildDSN("test.db", tc.flag)
+		if !contains(dsn, tc.want) {
+			t.Errorf("BuildDSN(flag=%d) = %q, missing %q", tc.flag, dsn, tc.want)
 		}
 	}
 }
