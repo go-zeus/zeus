@@ -67,4 +67,4 @@ tracing 自身不再提供额外 Option；采样率、exporter、资源属性等
 - cluster 标识由 `server/http` 或 `plugins/server/grpc` 入口自动注入 ctx，tracing 直接消费
 - baggage entries 由 `propagation` 自动从 HTTP Header / gRPC metadata extract，tracing 自动写入 span
 
-完整端到端示例参考 `examples/observability/`。
+完整端到端示例参考 `examples/19-observability/`（trace + metrics + log 三件套联动）。

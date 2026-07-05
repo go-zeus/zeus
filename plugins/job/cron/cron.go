@@ -13,7 +13,7 @@
 // 安全默认：
 //   - cron.Recover：单 Job panic 不影响其他 Job（与 interval goroutine 隔离一致）
 //   - cron.SkipIfStillRunning：避免重叠执行（cron 默认会并发触发，对慢任务危险）
-//   - 用户可通过 WithoutRecovery / WithoutSkipConcurrent 关闭
+//   - 用户可通过 WithoutRecovery 关闭 panic 恢复层（SkipIfStillRunning 当前为默认行为，未提供关闭开关）
 //
 // 用法：
 //

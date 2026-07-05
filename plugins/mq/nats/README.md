@@ -79,4 +79,4 @@ func processOrder([]byte, string) error { return nil }
 - 优雅关闭：`Close()` 取消所有订阅 ctx → 调用 `nc.Drain()` 等所有 in-flight 消息处理完 → 关闭连接
 - URL scheme：`import _ "plugins/mq/nats"` 后可用 `mq.NewBrokerFromURL("nats://127.0.0.1:4222?timeout=5s")`
 - 不抽象 JetStream（持久化 / ack / 事务）与 QueueGroup 之外的复杂路由，需要时直接用原生 `nats.Conn`
-- 完整端到端示例参考 `examples/mq/`
+- 完整端到端示例参考 `examples/15-mq/`（memory broker 演示，baggage 传播机制与 NATS 一致）
