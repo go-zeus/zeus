@@ -1,70 +1,87 @@
 # Zeus Full Demo · 完整微服务集群路由示例
 
-依据 `assets/traffic-flow.png` 流量图构建的端到端示例：**Gateway → srv-1（认证）→ srv-2（订单）→ srv-3（支付）**，每层都有 `default` 与 `canary` 双集群，按 `X-Zeus-Cluster` Header 端到端路由。
+端到端示例：**Gateway → api1 → srv1 → srv2 → srv3** 四层业务链路，按 `X-Zeus-Cluster` Header 端到端路由，演示"有标识走标识、无标识走 default"的降级语义。
+
+部署采用 **4 集群矩阵**（不是简单的 default/canary 双集群），每个业务服务部署到不同子集，覆盖典型灰度场景：
+
+| 集群 | 含义 | api1 | srv1 | srv2 | srv3 |
+|---|---|:---:|:---:|:---:|:---:|
+| `default` | 稳定基线 | ✓ | ✓ | ✓ | ✓ |
+| `user.v1.1` | 用户域灰度 | — | ✓ | ✓ | — |
+| `order.v2` | 订单域灰度 | — | — | ✓ | — |
+| `batch.v3` | 批处理灰度 | ✓ | ✓ | — | ✓ |
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                          [Gateway :8080]                          │
-│   注册中心 + 反向代理 + 可视化 API                                 │
-└────────────────┬─────────────────────────────────────────────────┘
-                 │ 按 X-Zeus-Cluster 路由
-        ┌────────┴────────┐
-        ▼                 ▼
-   [default]          [canary]
-   ┌────────┐         ┌────────┐
-   │ srv-1  │         │ srv-1  │   用户认证
-   └───┬────┘         └───┬────┘
-       │                  │
-   ┌───▼────┐         ┌───▼────┐
-   │ srv-2  │         │ srv-2  │   订单服务
-   └───┬────┘         └───┬────┘
-       │                  │
-   ┌───▼────┐         ┌───▼────┐
-   │ srv-3  │         │ srv-3  │   支付服务（终点）
-   └────────┘         └────────┘
+                         [Gateway :8080]
+                   注册中心 + 反向代理 + 可视化 API
+                              │
+                              ▼  按 X-Zeus-Cluster 路由
+                         [api1]  API 入口
+                     default  |  batch.v3
+                              │
+                              ▼
+                         [srv1]  用户认证
+              default  |  user.v1.1  |  batch.v3
+                              │
+                              ▼
+                         [srv2]  订单
+              default  |  user.v1.1  |  order.v2
+                              │
+                              ▼
+                         [srv3]  支付（终点）
+                      default  |  batch.v3
 ```
+
+请求带的 `X-Zeus-Cluster` 在每层"有则命中、无则降级 default"。例：`user.v1.1` 流量在 srv1/srv2 命中灰度实例，在 api1/srv3（未部署该集群）降级到 default。
+
+## 端到端路由矩阵
+
+发请求时指定 Header，观察每层实际命中的 cluster（client 自动降级用 `→` 标注）：
+
+| `X-Zeus-Cluster` | api1 | srv1 | srv2 | srv3 |
+|---|---|---|---|---|
+| *(无)* | default | default | default | default |
+| `user.v1.1` | default | **user.v1.1** | **user.v1.1** | default |
+| `order.v2` | default | default | **order.v2** | default |
+| `batch.v3` | **batch.v3** | **batch.v3** | default | **batch.v3** |
 
 ## 核心概念演示
 
 | 概念 | 体现位置 |
 |---|---|
-| **服务注册/反注册** | srv 启动调 `POST /internal/register`，关闭调 `DELETE` |
+| **服务注册/反注册** | 各服务启动调 `POST /internal/register`，关闭调 `DELETE` |
 | **Instance 数据模型** | Id/Name/Cluster/Protocol/Ip/Port/Metadata |
-| **多协议多实例** | 每个 srv 一个 Instance，Protocol=http |
-| **Cluster 路由** | 客户端 Header `X-Zeus-Cluster` → 实例 `Cluster` 字段匹配 |
-| **Cluster 透传** | zeus server/http 入口自动注入 ctx → client 自动透传 Header |
-| **优雅关闭** | SIGTERM → 反注册 → server.Shutdown（5s 超时） |
+| **多协议多实例** | 每个服务一个 Instance，Protocol=http；同名 Instance 按 Cluster 聚合 |
+| **Cluster 路由** | client 读 ctx cluster → 选 cluster 实例；`X-Zeus-Cluster` Header 端到端透传 |
+| **Cluster 降级** | 某层未部署请求 cluster 时，client 自动降级到 default（不报错） |
+| **优雅关闭** | SIGTERM → 反注册 → server.Stop（5s 超时） |
 
 ## 目录结构
 
 ```
 examples/20-full-demo/
-├── cmd/                            # 4 个可执行服务
-│   ├── gateway/main.go             # 网关 + 嵌入式注册中心
+├── cmd/                            # 6 个可执行服务
+│   ├── gateway/main.go             # 网关 + 嵌入式注册中心 + 反向代理
+│   ├── api1/main.go                # API 入口（调用链起点，调 srv1）
 │   ├── srv1/main.go                # 用户认证（调 srv2）
 │   ├── srv2/main.go                # 订单（调 srv3）
-│   └── srv3/main.go                # 支付（终点）
+│   ├── srv3/main.go                # 支付（调用链终点）
+│   └── frontend/main.go            # 静态文件托管 + /api/* 反代 gateway
 ├── internal/
-│   ├── gwapi/types.go              # 共享 JSON 类型
+│   ├── gwapi/types.go              # 共享 JSON 类型（Instance 等）
 │   ├── gwreg/client.go             # HTTP 自注册客户端
 │   ├── gwdisc/discovery.go         # HTTP discovery 适配 zeus registry.Discovery
 │   └── srvcfg/env.go               # 环境变量工具
-├── frontend/                       # 纯 HTML+JS 流量可视化
+├── frontend/                       # 前端静态资源（由 cmd/frontend 托管）
 │   ├── index.html
 │   ├── style.css
 │   └── app.js
 ├── docker/
-│   ├── service.Dockerfile          # 通用服务镜像（SVC=srv1/srv2/srv3/gateway）
-│   └── frontend.Dockerfile         # nginx + 反向代理
+│   ├── service.Dockerfile          # 通用服务镜像（SVC=api1/srv1/srv2/srv3/gateway）
+│   └── frontend.Dockerfile         # frontend 镜像（Go 二进制，替代 nginx）
 ├── deploy/
-│   ├── docker-compose.yml          # 8 个服务编排
-│   └── k8s/                        # 每个 srv 双 Deployment
-│       ├── namespace.yaml
-│       ├── gateway.yaml
-│       ├── srv1.yaml
-│       ├── srv2.yaml
-│       ├── srv3.yaml
-│       └── frontend.yaml
+│   ├── docker-compose.yml          # 12 个服务编排（gateway + 11 业务/frontend）
+│   └── k8s/                        # 每服务多 Deployment（按 cluster）
 ├── go.mod
 ├── Makefile
 └── README.md（本文件）
@@ -76,14 +93,15 @@ examples/20-full-demo/
 
 ```bash
 cd examples/20-full-demo
-make up                # 构建 + 启动 8 个容器
+make up                # 构建 + 启动 12 个容器（1 gateway + 11 业务/frontend）
 
 # 访问
-open http://localhost:8088   # 前端可视化
+open http://localhost:8088   # 前端可视化（frontend 容器 :8088）
 curl http://localhost:8080/api/services | jq   # 实例列表
 
-# 测试路由
-make test
+# 测试路由（详见上方"端到端路由矩阵"）
+curl http://localhost:8080/login
+curl -H 'X-Zeus-Cluster: user.v1.1' http://localhost:8080/login
 
 # 停止
 make down
@@ -93,7 +111,7 @@ make down
 
 ```bash
 cd examples/20-full-demo
-make k8s-images       # 构建并 load 5 个镜像
+make k8s-images       # 构建并 load 镜像
 make k8s-apply        # 应用 manifests
 
 # 获取前端访问地址
@@ -108,11 +126,11 @@ make k8s-delete
 
 ```bash
 cd examples/20-full-demo
-make build      # 编译 4 个二进制
-make run        # 后台启动 1 gateway + 6 srv（default+canary 各 3 个）
+make build      # 编译 6 个二进制
+make run        # 后台启动 1 gateway + 2 api1 + 3 srv1 + 3 srv2 + 2 srv3 = 11 实例
 
-# 前端单独跑
-cd frontend && python3 -m http.server 8088
+# 前端单独跑（Go 服务，托管静态 + 反代 /api/* 到 gateway）
+PORT=8088 GATEWAY_URL=http://localhost:8080 ./bin/frontend
 
 # 停止
 make stop
@@ -120,74 +138,95 @@ make stop
 
 ## 端到端调用链验证
 
-### default 链路（默认）
+### default 链路（基线）
 
 ```bash
 $ curl http://localhost:8080/login
 {
-  "service": "srv1",
+  "service": "api1",
   "cluster": "default",
   "version": "v1-stable",
-  "action": "user_authenticated",
+  "action": "api_entry",
   "downstream": {
-    "service": "srv2",
+    "service": "srv1",
     "cluster": "default",
     "version": "v1-stable",
-    "action": "order_created",
+    "action": "user_authenticated",
     "downstream": {
-      "service": "srv3",
+      "service": "srv2",
       "cluster": "default",
       "version": "v1-stable",
-      "action": "payment_processed"
+      "action": "order_created",
+      "downstream": {
+        "service": "srv3",
+        "cluster": "default",
+        "version": "v1-stable",
+        "action": "payment_processed"
+      }
     }
   }
 }
 ```
 
-### canary 链路（Header 路由）
+### user.v1.1 链路（srv1/srv2 命中灰度，api1/srv3 降级）
 
 ```bash
-$ curl -H 'X-Zeus-Cluster: canary' http://localhost:8080/login
+$ curl -H 'X-Zeus-Cluster: user.v1.1' http://localhost:8080/login
 {
-  "service": "srv1",
-  "cluster": "canary",
-  "version": "v2-canary",
-  ...
+  "service": "api1", "cluster": "default",  "version": "v1-stable",   "action": "api_entry",   # 降级
   "downstream": {
-    "service": "srv2",
-    "cluster": "canary",
-    "version": "v2-canary",
-    ...
+    "service": "srv1", "cluster": "user.v1.1", "version": "user.v1.1", "action": "user_authenticated",  # 命中
+    "downstream": {
+      "service": "srv2", "cluster": "user.v1.1", "version": "user.v1.1", "action": "order_created",     # 命中
+      "downstream": {
+        "service": "srv3", "cluster": "default", "version": "v1-stable", "action": "payment_processed"  # 降级
+      }
+    }
   }
 }
 ```
 
-注意：所有 3 层都命中 `canary`，证明 `X-Zeus-Cluster` 被端到端透传。
+### order.v2 链路（仅 srv2 命中）
+
+```bash
+$ curl -H 'X-Zeus-Cluster: order.v2' http://localhost:8080/login
+# api1=default, srv1=default, srv2=order.v2, srv3=default
+```
+
+### batch.v3 链路（api1/srv1/srv3 命中，srv2 降级）
+
+```bash
+$ curl -H 'X-Zeus-Cluster: batch.v3' http://localhost:8080/login
+# api1=batch.v3, srv1=batch.v3, srv2=default, srv3=batch.v3
+```
+
+每层响应里的 `cluster` 字段直观展示路由结果，证明 `X-Zeus-Cluster` 被端到端透传并按可用性降级。
 
 ## 前端可视化说明
 
 打开 `http://localhost:8088`：
-- **拓扑图**：实时显示 gateway + srv1/2/3 × default/canary，节点显示实例数
-- **按钮区**：发 default / canary 流量，发请求时高亮对应路径
-- **调用链**：嵌套 JSON 格式化展示，直观看到 3 层 cluster 一致性
+- **拓扑图**：实时显示 gateway + api1/srv1/srv2/srv3 × 各 cluster，节点显示实例数
+- **按钮区**：发 default / user.v1.1 / order.v2 / batch.v3 流量，发请求时高亮对应路径
+- **调用链**：嵌套 JSON 格式化展示，直观看到 4 层 cluster 命中/降级一致性
 
 ## 设计要点（KISS / DRY / SOLID 体现）
 
 | 设计 | 体现 |
 |---|---|
-| **单一 Dockerfile** | `service.Dockerfile` 通过 `--build-arg SVC=...` 编译不同服务（DRY） |
-| **服务自注册** | srv 通过 HTTP 调 gateway 注册，无外部依赖（不需要 etcd） |
+| **单一 Dockerfile** | `service.Dockerfile` 通过 `--build-arg SVC=...` 编译不同业务服务（DRY） |
+| **服务自注册** | 各服务通过 HTTP 调 gateway 注册，无外部依赖（不需要 etcd） |
 | **HTTP Discovery 适配器** | `gwdisc.New(url)` 实现 `registry.Discovery`，无缝接入 zeus client |
 | **cluster 自动透传** | server/http 入口注入 ctx → client 自动透传 Header，业务代码 0 改动 |
-| **优雅关闭** | 信号 → 反注册 → server.Shutdown，5s 超时兜底 |
-| **CORS 隔离** | gateway 加 CORS 头，前端可独立部署 |
+| **cluster 降级** | client 选不到目标 cluster 实例时回退 default，灰度发布容错核心 |
+| **优雅关闭** | 信号 → 反注册 → server.Stop，5s 超时兜底 |
+| **frontend 即 Go 服务** | `cmd/frontend` Go 二进制托管静态 + 反代，无需 nginx 基础镜像 |
 
 ## 与 zeus 组件库的对应
 
 | 示例组件 | zeus 包 |
 |---|---|
 | HTTP server | `server/http`（`httpdriver.NewHTTP`） |
-| HTTP client | `client.NewClient`（自动透传 cluster） |
+| HTTP client | `client.NewClient`（自动透传 cluster + 降级） |
 | 反向代理 | `proxy.New` + `proxy.NewDiscoverySelector` |
 | 内存注册中心 | `registry/memory` |
 | 集群路由 | `routing` 包（HeaderCluster 常量 + ctx 注入） |
@@ -203,8 +242,8 @@ $ curl -H 'X-Zeus-Cluster: canary' http://localhost:8080/login
 
 ## 扩展练习
 
-1. 把 `srv3` 改为 gRPC，用 `plugins/server/grpc`（保留 HTTP srv1/srv2，实现多协议混合）
-2. 集成 `ratelimit/cluster` 给 canary 集群限流
+1. 把 `srv3` 改为 gRPC，用 `plugins/server/grpc`（保留 HTTP api1/srv1/srv2，实现多协议混合）
+2. 集成 `ratelimit/cluster` 给 `batch.v3` 集群限流
 3. 接入 etcd 替换嵌入式 memory registry（`plugins/registry/etcd`）
 4. 把 frontend 的拓扑图升级为 D3.js 力导向图
 
