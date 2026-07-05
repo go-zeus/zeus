@@ -118,10 +118,10 @@ app.Run()
 
 | 域 | 入口 | 已注册 scheme |
 |---|---|---|
-| registry | `app.resolveRegistry` | `memory` / `etcd` |
+| registry | `app.resolveRegistry` | `memory` / `etcd` / `nacos` |
 | cache | `cache.NewFromURL` | `memory` / `redis` |
-| database | `database.NewFromURL` | `mysql` / `postgres` |
-| mq | `mq.NewBrokerFromURL` | `memory` / `nats` |
+| database | `database.NewFromURL` | `mysql` / `postgres` / `sqlite` |
+| mq | `mq.NewBrokerFromURL` | `memory` / `kafka` / `nats` |
 | job | `job.NewSchedulerFromURL` | `interval` / `cron` |
 
 ## 构建

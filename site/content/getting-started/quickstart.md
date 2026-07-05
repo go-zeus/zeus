@@ -34,7 +34,7 @@ func main() {
 | 日志 | `log/slog` 输出到 stdout |
 | 中间件 | recovery + requestID + 请求日志 |
 | 健康检查 | `/health` `/health/ready` `/health/live` |
-| Metrics | `/metrics`（noop meter 默认） |
+| Metrics | **非默认装配**：L1 `app.Run` 不注入 meter、不注册 `/metrics`；需经 L3 `WithMeter` + metrics 中间件显式启用 |
 | 信号处理 | SIGTERM/SIGINT/SIGQUIT → 优雅关闭（10s 超时） |
 | 服务名 | `zeus-service`（可覆盖） |
 
@@ -79,5 +79,5 @@ app.Run(&app.Config{
 ## 下一步
 
 - [4 层 API 详解](layered-api) — 何时升级到 L2/L3/L4
-- [配置指南](../guide/config) — Config 结构体字段说明
+- [配置加载指南](../guide/database) — 附近：数据访问与配置（独立的 `config` 包用法见 `examples/10-config/`）
 - [示例库](https://github.com/go-zeus/zeus/tree/main/examples) — 22 个完整示例

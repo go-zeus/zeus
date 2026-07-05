@@ -43,7 +43,7 @@ import (
 )
 
 func main() {
-    fmt.Println("zeus version:", app.Version)
+    fmt.Println("zeus installed successfully")
 }
 ```
 

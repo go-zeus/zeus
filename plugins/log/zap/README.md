@@ -59,5 +59,5 @@ custom := zapimpl.NewWith(myZapLogger) // 不接管生命周期，Close 只做 S
 - 与 `log.Logger` 配合：`log.NewLogger(zap.New())` 一行装配，业务侧继续用 `log.Info/Debug/Error` 高层 API
 - 与 `LogComponent` 配合：`components.NewLogComponent(w)` 装入 zeus App，`OnStop` 自动 `Sync` 落盘
 - 与 cluster 路由联动：`log.Logger.Log` 会自动注入 `cluster` 字段到 fields，本插件直接转 `zap.Any`，输出自然带 `cluster=canary` 标签（非 default 时）
-- 与 propagation 联动：从 ctx 读取 baggage entries 自动转 Field
-- 示例参考仓库 `examples/observability/`
+- 与 propagation 联动：baggage entries → Field 的转换由上层 `log.Logger` 统一完成（在 `Log` 调用前注入），本插件只负责把 Field 写入 zap
+- 示例参考仓库 `examples/19-observability/`

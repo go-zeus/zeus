@@ -86,4 +86,4 @@ func main() {
 - 与 `database/sql` / `cache/memory` 配合自动产生 `db.query` / `cache.get` 等子 span
 - 与 `plugins/middleware/metrics` 配合形成可观测性三件套（log + trace + metrics）
 
-完整端到端示例参考 `examples/observability/` 与 `examples/trace/`。
+完整端到端示例参考 `examples/19-observability/`（trace + metrics + log 三件套联动）。

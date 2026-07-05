@@ -44,7 +44,7 @@ chain := middleware.NewChain(
 
 | 层 | 默认中间件 | 说明 |
 |---|---|---|
-| **L1/L2** (`app.Run`) | recovery + requestID + accesslog + health + metrics | 自动包装 |
+| **L1/L2** (`app.Run`) | requestid → accesslog → recovery（`/health` 等端点单独路由，非中间件） | 自动包装 |
 | **L3** (`app.NewApp`) | 空（用户显式 `WithMiddleware`） | 用户完全控制 |
 
 L3 不自动包装的原因：用户已直接构造 `http.NewHTTP()`，对 server 中间件链有完全控制。
@@ -52,7 +52,12 @@ L3 不自动包装的原因：用户已直接构造 `http.NewHTTP()`，对 serve
 ## 自定义 Interceptor
 
 ```go
-type Interceptor func(req *http.Request, next http.Handler) http.Handler
+// Interceptor 是接口（非函数类型），需实现 Intercept + Name 两个方法
+type Interceptor interface {
+    Intercept(ctx context.Context, req Request, handler Handler) (Response, error)
+    Name() string
+}
+// Request / Response / Handler 都是 middleware 包内定义的接口类型（非裸 *http.Request）
 ```
 
 实现该签名即可作为中间件使用，无需任何额外抽象。

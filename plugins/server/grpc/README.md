@@ -66,6 +66,27 @@ app.Run(&app.Config{Port: 9090}, gs)
 | `NewGRPC(opts ...Option) server.Server` | 由插件内部创建 `*grpc.Server`，注入 cluster 拦截器后再执行 `Register` 回调 |
 | `FromGRPC(srv *grpc.Server, opts ...Option) server.Server` | 包装用户已构造好的 `*grpc.Server`；autoClustering 默认关闭，不覆盖用户拦截器链 |
 
+## 健康检查
+
+对齐 `server/http` 的 `/health`，本插件默认注册 gRPC 标准 [Health Checking Protocol](https://github.com/grpc/grpc/blob/master/doc/health-checking.md)（`grpc.health.v1`），整体服务状态（service name `""`）固定返回 `SERVING`，可供 K8s `livenessProbe` / `readinessProbe` 的 grpc 健康检查直接调用。
+
+| 入口 | 默认 | 调整 Option |
+|------|------|-------------|
+| `NewGRPC` | 开启 | `WithoutHealth()` 关闭 |
+| `FromGRPC` | 关闭（用户 server 可能已自注册，避免重复注册 panic） | `WithHealth()` 开启 |
+
+K8s 探针示例：
+
+```yaml
+livenessProbe:
+  grpc:
+    port: 9090
+  initialDelaySeconds: 5
+readinessProbe:
+  grpc:
+    port: 9090
+```
+
 ## 依赖
 
 - `google.golang.org/grpc`，要求 Go ≥ 1.22

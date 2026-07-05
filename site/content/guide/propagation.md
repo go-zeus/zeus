@@ -53,4 +53,4 @@ ctx = propagation.ExtractHTTP(ctx, r.Header)
 - 直接用 `grpc.Dial()` → 手动 `propagation.InjectMetadataMulti(ctx, md)`
 - 直接用 `kafka-go` / `sarama` 等 MQ 库 → 在消息 Header 中手动写入/读取
 
-完整示例参见 `examples/propagation/`：演示 baggage 入站自动 extract + 业务注入 + log 自动带 Field。
+完整示例参见 `examples/18-propagation/`：演示 baggage 入站自动 extract + 业务注入 + log 自动带 Field。

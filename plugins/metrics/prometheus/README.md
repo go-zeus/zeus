@@ -75,4 +75,4 @@ func main() {
 - 与 `database/sql` / `cache/memory` 配合自动采集 `db_query_total` / `cache_op_total` 等
 - 默认注册到 `prometheus.DefaultRegisterer`，Prometheus Agent 抓取 `/metrics` 即可
 
-完整端到端示例参考 `examples/observability/` 与 `examples/metrics/`。
+完整端到端示例参考 `examples/19-observability/`（metrics + trace + log 三件套联动）。

@@ -10,8 +10,10 @@
 //   - 单 consumer group 模式：broker 实例绑一个 group；不同 group 各自构造 broker
 //     原因：sarama ConsumerGroup API 要求构造时指定 group，而 mq.Broker.Subscribe 不带 group
 //   - handler 在 sarama ConsumerGroup 的内部 goroutine 中执行（不另开 goroutine）
-//   - ack 语义：handler 返回 nil → 提交 offset；handler 返回 error → 不提交，下次重新投递
-//   - ErrorHandler：handler 失败时调用，默认 log.Error
+//   - ack 语义：handler 无论返回 nil 还是 error 都提交 offset（ack）
+//     原因：Kafka partition 内严格顺序，单条失败不 ack 会阻塞后续所有消息（毒丸）；
+//     需要重试/死信语义时请在 handler 内自行处理（如转投死信 topic）。
+//   - ErrorHandler：handler 失败时调用（仍会 ack），默认 log.Error
 //
 // 不做的事：
 //   - 不抽象 partition / key 路由（默认 round-robin；如需 key 路由用 WithProducerOption）
@@ -32,7 +34,7 @@
 //	if err != nil { return err }
 //	defer broker.Close()
 //
-//	// 订阅（handler 返回 nil 自动 ack offset）
+//	// 订阅（无论 handler 返回 nil 还是 error 都会 ack offset；error 走 ErrorHandler）
 //	_ = broker.Subscribe(ctx, "orders.created", func(ctx context.Context, msg *mq.Message) error {
 //	    // ctx 已自动注入 baggage（如 tenant.id）
 //	    return processOrder(msg.Payload)

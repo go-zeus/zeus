@@ -108,7 +108,8 @@ type Config struct {
 	// Database 可选数据库 URL scheme（保持零配置："" 表示不装配 database 组件）：
 	//   ""                                       → 不装配（默认）
 	//   "mysql://user:pass@host:3306/db?pool=50" → plugins/database/mysql（需 import _ 该包）
-	//   "postgres://..."                          → plugins/database/postgres（待补）
+	//   "postgres://..."                          → plugins/database/postgres（需 import _ 该包）
+	//   "sqlite://file.db"                        → plugins/database/sqlite（需 import _ 该包）
 	//
 	// L2 设计：与 Cache 同理。L2 用户通过 cache.NewFromURL/database.NewFromURL 等函数
 	// 可在任意层级调用（不仅限于 Config）。
@@ -117,7 +118,8 @@ type Config struct {
 	// MQ 可选消息队列 URL scheme（保持零配置："" 表示不装配 mq 组件）：
 	//   ""                → 不装配（默认）
 	//   "memory://"       → mq/memory（需 import _ "github.com/go-zeus/zeus/mq/memory"）
-	//   "kafka://..."     → plugins/mq/kafka（待补）
+	//   "kafka://..."     → plugins/mq/kafka（需 import _ 该包）
+	//   "nats://..."      → plugins/mq/nats（需 import _ 该包）
 	MQ string
 }
 

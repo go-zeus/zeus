@@ -71,7 +71,7 @@ weight: 10
 | 日志 | `log/slog` |
 | 中间件 | recovery + requestID + 请求日志 |
 | 健康检查 | `/health` `/health/ready` `/health/live` |
-| Metrics | `/metrics` |
+| Metrics | **非默认装配**（需 L3 `WithMeter` 启用） |
 | 信号处理 | SIGTERM/SIGINT/SIGQUIT → 优雅关闭（10s 超时） |
 | 服务名 | `zeus-service`（用户可覆盖） |
 

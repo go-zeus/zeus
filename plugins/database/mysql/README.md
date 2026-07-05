@@ -75,7 +75,6 @@ func main() {
 | `MaxOpenConns` | `int` | `0`（不限） | 连接池上限 |
 | `MaxIdleConns` | `int` | `0` | 空闲连接数 |
 | `ConnMaxLifetime` | `time.Duration` | `0` | 连接最长生命周期 |
-| `ConnMaxIdleTime` | `time.Duration` | `0` | 空闲连接最长存活 |
 
 `BuildDSN` 助手签名：
 

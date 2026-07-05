@@ -81,4 +81,4 @@ status 默认值：handler 正常返回且 `StatusCode()==0` 时记为 `200`；h
 - cluster 标识由入口中间件（`server/http` / `plugins/server/grpc`）自动注入 ctx
 - baggage entries 由 `propagation` 跨服务透传，本中间件按白名单读取
 
-完整端到端示例参考 `examples/observability/`。
+完整端到端示例参考 `examples/19-observability/`（metrics + trace + log 三件套联动）。

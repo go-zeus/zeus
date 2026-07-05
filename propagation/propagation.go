@@ -82,10 +82,25 @@ func (b *Bag) With(key, value string) *Bag {
 }
 
 // WithEntries 批量追加（按顺序，同 Key 后写覆盖）
+//
+// 实现说明：单次 clone 后批量 append，避免逐个调用 With 导致的 O(N²) 拷贝
+// （每次 With 都重建 entries slice + index map）。行为与逐个 With 完全一致：
+// 空 key 跳过、同 Key 覆盖保留原位置、插入顺序保留。
 func (b *Bag) WithEntries(entries ...Entry) *Bag {
-	next := b
+	if len(entries) == 0 {
+		return b
+	}
+	next := b.clone() // 一次 clone，之后批量写入（原 Bag 不变，保持不可变语义）
 	for _, e := range entries {
-		next = next.With(e.Key, e.Value)
+		if e.Key == "" {
+			continue // 与 With 一致：空 key 跳过
+		}
+		if idx, ok := next.index[e.Key]; ok {
+			next.entries[idx] = e
+			continue
+		}
+		next.index[e.Key] = len(next.entries)
+		next.entries = append(next.entries, e)
 	}
 	return next
 }

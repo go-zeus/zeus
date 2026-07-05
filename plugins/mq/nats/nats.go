@@ -11,7 +11,7 @@
 //   - 不实现批量消费 / 顺序保证 —— 用 JetStream
 //
 // 设计权衡：
-//   - 同步 Publish：默认 nc.Publish（不等待 ack）；用户需要确认时用 WithJetStream（待补）
+//   - 同步 Publish：默认 nc.Publish（不等待 ack）；需要持久化/确认语义时直接用 NATS JetStream 原生 SDK（见"不做的事"）
 //   - 订阅 push 模式：NATS 内部 worker pool 调度，handler 直接在回调中执行
 //     （不另开 goroutine，避免双层调度开销）
 //   - ErrorHandler 默认 log.Error，可注入告警钩子

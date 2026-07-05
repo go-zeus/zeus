@@ -16,15 +16,16 @@
 |------|------|------|
 | `app.Run(ctx, cfg, handler)` | 🔒 稳定 | 入口函数签名冻结 |
 | `app.Config` 结构体字段 | 🔒 稳定 | 已有字段不删除/不改语义；新字段可追加 |
-| `app.DefaultConfig()` | 🔒 稳定 | 返回零值可用配置 |
 
 **冻结理由**：L1 是面向"5 行启动"的入口，破坏会让所有用户重写。任何调整必须升 major。
+
+> 注：`app.Config{}` 零值即可用（`Port` 默认 8080，`Name` 默认 `zeus-service`），无需构造函数。
 
 ## L2 API 表面（稳定）
 
 | 符号 | 等级 | 说明 |
 |------|------|------|
-| URL scheme 协议：`memory://` / `etcd://` / `k8s://` / `redis://` / `mysql://` / `nats://` / `cron://` | 🔒 稳定 | 已注册 scheme 不改语义；query 参数可追加 |
+| URL scheme 协议：`memory://` / `etcd://` / `nacos://` / `redis://` / `mysql://` / `postgres://` / `sqlite://` / `kafka://` / `nats://` / `interval://` / `cron://` | 🔒 稳定 | 已注册 scheme 不改语义；query 参数可追加（注：`k8s://` 是 config 包的 ConfigMap loader，非 registry scheme） |
 | `Config.Registry/Cache/Database/MQ/Job` URL 字段 | 🔒 稳定 | 已有字段不删除 |
 | Handler 类型推断规则（`http.Handler` → HTTP，`*grpc.Server` → gRPC） | 🔒 稳定 | 推断行为不变 |
 

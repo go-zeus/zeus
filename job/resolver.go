@@ -5,9 +5,11 @@
 // 用户在配置中传入：
 //
 //	"interval://"                      → job/interval（内置，固定间隔）
-//	"interval://?err=custom"           → interval + 自定义 ErrorHandler（待补）
 //	"cron://"                           → plugins/job/cron（cron 表达式）
 //	"cron://?seconds=true&loc=UTC"     → cron + 启用秒字段 + 时区
+//
+// 说明：interval 调度器无 URL 可配参数，ErrorHandler 由 components 包装层注入
+// （见 components.NewJobComponent），故不通过 URL query 传递。
 //
 // plugins 在 init() 中调用 job.RegisterResolver 注册自己的 scheme，
 // 主包零依赖（不直接 import plugins/job/cron 等第三方包）。

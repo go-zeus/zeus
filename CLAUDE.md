@@ -42,9 +42,9 @@ Zeus 是一个零依赖、可插拔的 Go 微服务框架。采用现代 Go 构�
 | Server 协议选择 | 按 handler 类型推断（`http.Handler` → HTTP，`*grpc.Server` → gRPC） |
 | 注册中心 | `registry/memory`（L1）/ 用户指定 URL（L2+） |
 | 日志 | `log/slog`（输出到 stdout） |
-| 中间件 | recovery + request ID + 请求日志 |
-| 健康检查 | `/health` `/health/ready` `/health/live` |
-| Metrics | `/metrics`（noop meter 默认，可注入 prometheus） |
+| 中间件 | requestid → accesslog → recovery（外→内，仅在使用 DefaultHandler 时自动包装） |
+| 健康检查 | `/health` `/health/ready` `/health/live`（仅在使用 DefaultHandler 时注册；用户传自定义 handler 需自行挂载） |
+| Metrics | **非默认装配**：L1 `app.Run` 不注入 meter、不注册 `/metrics`；需经 L3 `WithMeter` + `metricsmw` 显式启用 |
 | 信号处理 | SIGTERM/SIGINT/SIGQUIT → 优雅关闭（10s 超时） |
 | 服务名 | 默认 `zeus-service`（用户可覆盖） |
 
@@ -172,7 +172,7 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | balancer | `Balancer` | 纯接口 | `balancer/random,round_robin` | — |
 | server | `Server` | 纯接口 | `server/http`（含健康检查 + 自动集群路由注入） | `plugins/server/grpc`（含自动集群路由注入） |
 | ~~service~~ | — | **已删除**（职责与 app/components 重叠） | — | — |
-| log | `Writer` | `Logger` 结构体（With/Close） | `log/slog`（+ stdWriter 自动注入 cluster Field） | `plugins/log/zap` |
+| log | `Writer` | `Logger` 结构体（With/Close） | `log/slog`（cluster Field 自动注入在公共 `Logger` 层，非 slog 专属） | `plugins/log/zap`、`plugins/log/file_rotate` |
 | config | `Loader`/`Watcher`/`Decoder` | `Config` 结构体（Get/Watch/Close） | `config/file` | `plugins/config/etcd,k8s`（etcd = KV 配置树；k8s = ConfigMap 加载） |
 | encoding | `Codec` | 纯接口 | `encoding/json` | `plugins/encoding/protobuf` |
 | middleware | `Interceptor` | `Chain` 类型 | `middleware/recovery,timeout,clustering` | `plugins/middleware/tracing,metrics`（自动注入 cluster） |
@@ -189,6 +189,20 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | database | `DB`/`Tx`/`Rows`/`Row` | `database.DBOptions` + `database.WithTx(ctx, tx)`/`FromTx(ctx)` | `database/sql`（薄封装 stdlib database/sql，自动 trace/metrics/tx_id） | `plugins/database/mysql`、`postgres`、`sqlite` |
 | cache | `Cache` | `cache.Item{Key, Value, TTL}` + `cache.WithTTL(d)` | `cache/memory`（基于 sync.Map + TTL 双路径清理，零依赖） | `plugins/cache/redis` |
 | client | `HTTPClient`（`type Client = HTTPClient` 别名兼容） | `client.NewClient`（HTTP 专用，自动集群路由 + baggage 传播） | `client` | `plugins/client/grpc`（独立抽象，自动注入 cluster metadata + baggage） |
+
+### 通用工具包（无 plugins，零依赖）
+
+与上述功能域不同，以下包是**纯工具型**（无接口抽象层、无第三方实现、不在 plugins 下），直接导出构造函数或类型供业务使用：
+
+| 包 | 用户 API | 说明 |
+|---|---|---|
+| batch | `batch.New[T](handler, WithMaxBatchSize(n), WithMaxWait(d))` → `Batcher[T].Add/TryAdd/AddContext/Flush/Close` | 泛型批处理：双触发（最大批量 + 最大等待时间），线程安全，Flush 残留批次优雅关闭。用于 DB 批量插入 / 日志批量写入 |
+| page | `page.Request`（Page/Size/Sort）→ `Normalize()` + `Offset()/Limit()`；`page.Paginate[T](req, items)` → `Response[T]` | 泛型分页 + 排序辅助：page<1→1、size 超界自动校正。用于 HTTP API 分页 / LIMIT-OFFSET 包装 |
+| validation | `validation.New()` 链式校验 | 轻量级链式校验（字段规则 + 错误聚合），反射兜底仅用于类型断言未覆盖场景 |
+| snowflake | `snowflake.New(machineID)` / `MustNew` → `Node.Next()` / `MustNext()`；`Parse(id)` 反解 | Twitter Snowflake 分布式 ID 生成器：趋势递增、时钟回拨保护、单机 409.6 万/s |
+| errors | `errors.New(reason, message, code)` / `Newf` / `FromError(err)` | Kratos 风格业务错误码：reason+message+code+metadata，HTTP/gRPC 双协议自动映射，兼容标准 `errors.Is/As` |
+| metadata | `metadata.MD`（`map[string]string`） + `metadata.NewContext`/`FromContext`/`Get`/`Set`/`Delete`/`MergeContext`/`Copy`/`Equal` | 请求级 K-V 元数据（context 传递，单 context 无锁）；与 propagation 的区别：metadata 是进程内 context 值，不跨进程透传 |
+| safe | `safe.GO(func() error)` | 带 panic 恢复的 goroutine 启动器（避免单 goroutine panic 拖垮进程） |
 
 ### 构造与使用
 
@@ -257,10 +271,10 @@ engine.go → components.NewApp(comps...) → app.Run()
 
 | 功能域 | 入口函数 | 已注册 scheme | 实现 |
 |---|---|---|---|
-| registry | `app.NewFromURL`（实际在 `app.resolveRegistry`） | `memory` / `etcd`（plugin） | `registry/memory` / `plugins/registry/etcd` |
+| registry | `app.NewFromURL`（实际在 `app.resolveRegistry`） | `memory` / `etcd` / `nacos`（plugin） | `registry/memory` / `plugins/registry/{etcd,nacos}` |
 | cache | `cache.NewFromURL` | `memory` / `redis`（plugin） | `cache/memory` / `plugins/cache/redis` |
-| database | `database.NewFromURL(url, tracer, meter)` | `mysql`（plugin） | `plugins/database/mysql`（postgres 待补） |
-| mq | `mq.NewBrokerFromURL` | `memory` | `mq/memory`（kafka/nats 待补） |
+| database | `database.NewFromURL(url, tracer, meter)` | `mysql` / `postgres` / `sqlite`（plugin） | `plugins/database/{mysql,postgres,sqlite}` |
+| mq | `mq.NewBrokerFromURL` | `memory` / `kafka` / `nats`（plugin） | `mq/memory` / `plugins/mq/{kafka,nats}` |
 | job | `job.NewSchedulerFromURL` | `interval` / `cron`（plugin） | `job/interval` / `plugins/job/cron` |
 
 注册机制：用户在主程序 `import _ "..."` 副作用包即可激活对应 scheme（plugins 在 `init()` 调用 `RegisterResolver`）。主仓零依赖。
@@ -364,6 +378,10 @@ server/http 内置健康检查端点（使用 DefaultHandler 时自动注册）�
 - `GET /health` — 固定返回 200
 - `GET /health/ready` — 调用 HealthChecker.IsReady()
 - `GET /health/live` — 调用 HealthChecker.IsAlive()
+
+plugins/server/grpc 默认注册 gRPC 标准 Health Checking Protocol（`grpc.health.v1`），整体服务状态返回 `SERVING`，供 K8s grpc probe 调用：
+- `NewGRPC` 默认开启，`WithoutHealth()` 关闭
+- `FromGRPC` 默认关闭（用户 server 可能已自注册，避免重复注册 panic），`WithHealth()` 开启
 
 ## 数据模型
 

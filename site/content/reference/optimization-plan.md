@@ -22,7 +22,7 @@ weight: 30
 | 配置中心 | ✓ | ✓ | ✓ | ✓ | ✓(file/etcd/k8s) | 持平 |
 | MQ 抽象 | ✗ | ✗ | ✗ | ✓(BuildingBlock) | ✓(memory/kafka/nats) | 持平 |
 | 任务调度 | ✗ | ✗ | ✗ | ✗ | ✓(interval/cron) | **领先** |
-| 数据库抽象 | ✓sqlx | ✓(data) | ✗ | ✓ | ✓(sql/mysql/postgres) | 持平 |
+| 数据库抽象 | ✓sqlx | ✓(data) | ✗ | ✓ | ✓(sql/mysql/postgres/sqlite) | 持平 |
 | 缓存抽象 | ✓ | ✓ | ✗ | ✓ | ✓(memory/redis) | 持平 |
 | 跨进程事务 | ✗ | ✗ | ✗ | ✓(workflow) | ✓(tx_id 透传) | **领先** |
 | **TLS / mTLS** | ✓ | ✓ | ✓ | ✓ | ✓ | ✅ **已实现** |
@@ -129,11 +129,11 @@ P1 阶段（业务高频）
 ├─ errors 包: Error 类型 + HTTP/gRPC 映射 + 测试
 ├─ validation 包: 链式 API + 内置规则 + 测试
 ├─ testutil 包: mock + builder + helper + 测试
-└─ utils/snowflake: Generator + 时钟回拨保护 + 测试
+└─ snowflake 包: Generator + 时钟回拨保护 + 测试
 
 P2 阶段（增强）
 ├─ batch 包: Batcher + 测试
-└─ utils/page: Page + Sort + Filter + Result + 测试
+└─ page 包: Page + Sort + Filter + Result + 测试
 ```
 
 ## 五、与现有架构的兼容性

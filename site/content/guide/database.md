@@ -71,4 +71,4 @@ db, err := mysql.New(database.DBOptions{
 }, tracer, meter)
 ```
 
-完整示例参见 `examples/database/`：建表/插入/查询/事务/tx_id 透传（用 fake driver，无需真实 DB）。
+完整示例参见 `examples/13-database/`：建表/插入/查询/事务/tx_id 透传（用 fake driver，无需真实 DB）。

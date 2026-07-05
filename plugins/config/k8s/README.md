@@ -67,6 +67,7 @@ dsn := cfg.Get("database/dsn") // data["database/dsn"]
 
 - `k8s.io/client-go`（kubernetes 客户端）
 - `k8s.io/api` / `k8s.io/apimachinery`（核心类型与错误）
+- **Go ≥ 1.26**：`k8s.io/apimachinery v0.36+` 强制要求 Go 1.26，高于主仓 1.22 兼容承诺；复制使用前确认工具链版本
 
 ## 集成
 

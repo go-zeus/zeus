@@ -6,12 +6,12 @@
 |---|---|
 | [00-app-quickstart](00-app-quickstart/) | L4 `components.NewApp` 手动装配 |
 | [01-hello](01-hello/) | **L1 入门**：最小 HTTP 服务，体验零配置启动 |
-| [02-with-registry](02-with-registry/) | L2 URL scheme 切换注册中心（memory / etcd） |
+| [02-with-registry](02-with-registry/) | L2 双实例 + 默认 memory registry（演示服务发现） |
 | [03-typed](03-typed/) | **L3 类型装配**：`app.NewApp` + `WithXxx` Option 模式 |
 | [04-config-driven](04-config-driven/) | L2 URL scheme 切换 cache/database/mq |
 | [05-autoapp](05-autoapp/) | L4 自动装配最小示例 |
 | [06-autoapp-full](06-autoapp-full/) | L4 自动装配完整示例 |
-| [07-autoapp-multi](07-autoapp-multi/) | L3 多 Server 单 App（HTTP 双端口） |
+| [07-autoapp-multi](07-autoapp-multi/) | L4 多 Server 单 App（`components.NewApp`，HTTP 双端口） |
 | [08-client](08-client/) | HTTP 客户端 + 服务发现 + 集群路由 |
 | [09-middleware](09-middleware/) | 中间件链组合 |
 | [10-config](10-config/) | 配置加载（file loader） |
@@ -24,7 +24,7 @@
 | [17-job-cron](17-job-cron/) | plugins/job/cron cron 表达式 |
 | [18-propagation](18-propagation/) | W3C Baggage 全链路传播 |
 | [19-observability](19-observability/) | metrics + trace + log 三件套 |
-| [20-full-demo](20-full-demo/) | gateway + 3 srv + frontend 端到端演示 |
+| [20-full-demo](20-full-demo/) | gateway + api1 + srv1/2/3 + frontend 端到端演示（4 集群路由矩阵） |
 | [21-registry-etcd](21-registry-etcd/) | plugins/registry/etcd |
 
 ## 使用方式
@@ -36,7 +36,7 @@ cd examples/01-hello
 go run .
 ```
 
-具体启动参数与测试方式见每个目录下 `main.go` 顶部注释。
+具体启动参数、测试命令、核心 API 与衔接说明见每个目录下 `README.md`。
 
 ## Docker 一键启动
 
@@ -65,7 +65,7 @@ EOF
 docker build -t my-zeus-app -f Dockerfile.scratch . && docker run --rm -p 8080:8080 my-zeus-app
 ```
 
-按示例端口调整 `-p` 映射（如 03-typed 用 9001、08-client 用 18081，详见各 `main.go`）。
+按示例端口调整 `-p` 映射：`01-hello`=8080、`03-typed`=9080/9081、`07-autoapp-multi`=9001/9002、`11-proxy`=8081、`19-observability`=18090；`08-client` 不监听端口（纯客户端）。详见各 `main.go` 顶部注释。
 
 ## 学习路径建议
 
