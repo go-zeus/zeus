@@ -36,7 +36,7 @@ cd examples/01-hello
 go run .
 ```
 
-具体启动参数与测试方式见每个目录下 `main.go` 顶部注释。
+具体启动参数、测试命令、核心 API 与衔接说明见每个目录下 `README.md`。
 
 ## Docker 一键启动
 
