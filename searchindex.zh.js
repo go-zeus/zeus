@@ -5,7 +5,7 @@ var relearn_searchindex = [
     "description": "零依赖、可插拔的 Go 微服务框架",
     "tags": [],
     "title": "Zeus",
-    "uri": "/index.html"
+    "uri": "/zeus/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 快速开始",
@@ -13,7 +13,7 @@ var relearn_searchindex = [
     "description": "环境要求 Go 1.22+（主仓要求，log/slog 等标准库 API 决定） 可选：Go 1.25+（如需使用 etcd/otel 等插件） 主仓安装 1go get github.com/go-zeus/zeus 主仓零第三方依赖，所有第三方实现都在 plugins/ 下作为独立 module 维护。\n插件安装 按需引入，互不影响：\n1go get github.com/go-zeus/zeus/plugins/registry/etcd 2 3go get github.com/go-zeus/zeus/plugins/cache/redis 4 5go get github.com/go-zeus/zeus/plugins/mq/kafka 6 7go get github.com/go-zeus/zeus/plugins/metrics/prometheus 完整插件清单参见 插件 BOM。",
     "tags": [],
     "title": "安装",
-    "uri": "/getting-started/installation/index.html"
+    "uri": "/zeus/getting-started/installation/index.html"
   },
   {
     "breadcrumb": "Zeus",
@@ -21,7 +21,7 @@ var relearn_searchindex = [
     "description": "",
     "tags": [],
     "title": "快速开始",
-    "uri": "/getting-started/index.html"
+    "uri": "/zeus/getting-started/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 架构设计",
@@ -29,7 +29,7 @@ var relearn_searchindex = [
     "description": "内部复杂（灵活）+ 外部简单（默认）。\n用户 5 行代码启动应用，需要时能挖到底层实现细节。\n所有 PR、API 设计、文档组织都必须服从这条哲学。新增功能前先回答：“能不能在用户不需要时看不到？”\n验收指标（可量化） 指标 目标 业界标杆 Hello world 代码行数 ≤ 5 行 Gin: 7 行 / FastAPI: 5 行 L1 用户需记忆的概念数 ≤ 2 个（App + Config） Redis: 5 / Gin: 3 默认装配数量 ≥ 8 个组件 Django: batteries included 从 demo 到生产改动 仅改配置 go-zero: etc/ L1 → L4 切换成本 渐进，无需重写 Spring Boot 分层 设计参考 不是抄作业，而是借鉴 + 不抄的部分：",
     "tags": [],
     "title": "设计哲学",
-    "uri": "/architecture/design-philosophy/index.html"
+    "uri": "/zeus/architecture/design-philosophy/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -37,7 +37,7 @@ var relearn_searchindex = [
     "description": "注册中心三层模型对齐 K8s Endpoints + Istio ServiceEntry：\n概念 说明 Instance 实例（一个进程的一个端口），含 Id/Name/Cluster/Protocol/Ip/Port/Metadata/Labels Cluster 集群（同名+同 cluster 的实例集合，按 cluster 路由的候选池） ServiceEntry 逻辑服务（同名实例的集合） 注册/反注册最小单位是 *types.Instance。多协议应用注册多条 Instance（每条带 Protocol 字段，如 http/grpc）。\n内置实现 1import \"github.com/go-zeus/zeus/registry/memory\" 2 3reg := memory.New() registry/memory 是进程内实现，零依赖，主要用于单进程 demo 和单测 mock。\nplugins 实现 1import _ \"github.com/go-zeus/zeus/plugins/registry/etcd\" 通过 import _ 副作用注册 etcd:// scheme。\nURL scheme 切换 L2 用户通过 URL 字符串切换实现：",
     "tags": [],
     "title": "注册中心",
-    "uri": "/guide/registry/index.html"
+    "uri": "/zeus/guide/registry/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -45,7 +45,7 @@ var relearn_searchindex = [
     "description": "并行开发场景下，多个项目共享同一套服务，每个项目对应一组灰度实例（cluster）。流量通过 X-Zeus-Cluster Header 端到端路由：“有标识走标识，无标识走 default”。\n术语统一为 cluster，与 K8s/Istio/Envoy/gRPC xDS 对齐。\n传播链路 [Client] X-Zeus-Cluster: canary │ ▼ HTTP Header / gRPC metadata[\"x-zeus-cluster\"] [Gateway (proxy)] NewDiscoverySelector 从 Header 读 cluster → 选 cluster → 转发 │ ▼ Header 透传 [HTTP Server (srv-1)] 入口 clusterInjector 自动注入 ctx │ ├─ tracing: span.Attrs[\"zeus.cluster\"]=cluster │ ├─ metrics: labels[\"cluster\"]=cluster │ └─ log: 自动 Field{cluster} ▼ [业务 handler] ctx 已含 cluster │ ▼ client.Do(): resolveCluster 读 ctx → 选 cluster → 注入 Header [HTTP Server (srv-2)] 同 srv-1 核心 API 1import \"github.com/go-zeus/zeus/routing\" 2 3// HTTP 入口注入 4ctx := routing.WithCluster(r.Context(), routing.ClusterFromHTTPHeader(r.Header)) 5 6// 业务读取 7c := routing.FromContext(ctx) 8 9// 常量 10routing.HeaderCluster // \"X-Zeus-Cluster\" 11routing.MetadataCluster // \"x-zeus-cluster\"（gRPC metadata） 12routing.Default // \"default\" 默认行为 组件 行为 server/http 默认自动注入 cluster（WithoutAutoClustering() 关闭） plugins/server/grpc 默认 UnaryServerInterceptor 从 metadata 提取 cluster 注入 ctx plugins/client/grpc UnaryInterceptor() 从 ctx cluster 注入 outgoing metadata log 包 自动 prepend Field{cluster}（仅非 default 时） plugins/middleware/tracing 自动写入 span attribute zeus.cluster plugins/middleware/metrics 自动打 label cluster 治理模块按 cluster 维度 1import clusterlimit \"github.com/go-zeus/zeus/ratelimit/cluster\" 2import clusterbreak \"github.com/go-zeus/zeus/circuitbreaker/cluster\" 3import clusterretry \"github.com/go-zeus/zeus/retry/cluster\" 4 5// 每个 cluster key 独立桶/熔断器/重试策略 6limiter := clusterlimit.New(func() ratelimit.Limiter { return token.New(100, 10) }) 7ok := limiter.Allow(ctx) // 从 ctx 提取 cluster 作为 key 8 9cb := clusterbreak.New(func() circuitbreaker.Breaker { return counter.New(100, 0.5) }) 10err := cb.Execute(ctx, func() error { ... }) 11 12cr := clusterretry.New(func() retry.Retrier { return exponential.New(3, 100*time.Millisecond) }) 13r := cr.NewRetriever(ctx) 完整示例 参见 examples/12-cluster-routing/：单进程演示 gateway → srv1 → srv2 多 cluster 路由 + cluster 全链路传播。",
     "tags": [],
     "title": "集群路由",
-    "uri": "/guide/cluster-routing/index.html"
+    "uri": "/zeus/guide/cluster-routing/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 快速开始",
@@ -53,7 +53,7 @@ var relearn_searchindex = [
     "description": "最小可运行示例 1package main 2 3import ( 4 \"net/http\" 5 6 \"github.com/go-zeus/zeus/app\" 7) 8 9func main() { 10 app.Run(\u0026app.Config{Port: 8080}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { 11 w.Write([]byte(\"hello from zeus\")) 12 })) 13} 14 15// curl http://localhost:8080 默认装配（零配置自动启用） 未配置时自动启用，用户零感知：\n默认项 内置实现 Server 协议 按 handler 类型推断（http.Handler → HTTP） 注册中心 registry/memory（L1） 日志 log/slog 输出到 stdout 中间件 recovery + requestID + 请求日志 健康检查 /health /health/ready /health/live Metrics 非默认装配：L1 app.Run 不注入 meter、不注册 /metrics；需经 L3 WithMeter + metrics 中间件显式启用 信号处理 SIGTERM/SIGINT/SIGQUIT → 优雅关闭（10s 超时） 服务名 zeus-service（可覆盖） 关键规则：默认装配不允许失败。任何\"必须配置才能跑\"的字段都是设计缺陷。",
     "tags": [],
     "title": "快速开始",
-    "uri": "/getting-started/quickstart/index.html"
+    "uri": "/zeus/getting-started/quickstart/index.html"
   },
   {
     "breadcrumb": "Zeus",
@@ -61,7 +61,7 @@ var relearn_searchindex = [
     "description": "按功能域组织。每个功能域统一结构：\n功能域/ ├── 功能域.go ← 接口定义 + 用户 API ├── 内置实现/ ← 零依赖，导出 New() 构造函数 └── (plugins/第三方实现) ← 有第三方依赖，独立 go.mod 功能域清单 域 内置实现 plugins 实现 registry registry/memory plugins/registry/etcd / nacos config config/file plugins/config/etcd,k8s server server/http plugins/server/grpc client client plugins/client/grpc log log/slog plugins/log/zap / file_rotate observability (metrics/trace/log) metrics/noop / trace/noop / log/slog plugins/metrics/prometheus / plugins/trace/otel proxy proxy（HTTP/WS/SSE） plugins/proxy/grpc encoding encoding/json plugins/encoding/protobuf middleware recovery/timeout/clustering/requestid/accesslog plugins/middleware/tracing,metrics circuitbreaker circuitbreaker/counter（按 cluster 隔离） — ratelimit ratelimit/token（按 cluster 隔离） — retry retry/exponential（按 cluster 路由） — propagation propagation（W3C Baggage 兼容） — cluster-routing routing（X-Zeus-Cluster 端到端路由） — job job/interval（固定间隔） plugins/job/cron（cron 表达式） mq mq/memory（进程内事件总线） plugins/mq/nats,kafka database database/sql（薄封装 stdlib） plugins/database/mysql/postgres/sqlite cache cache/memory（TTL 双路径清理） plugins/cache/redis URL scheme 切换 各功能域支持 URL scheme 切换实现：",
     "tags": [],
     "title": "用户指南",
-    "uri": "/guide/index.html"
+    "uri": "/zeus/guide/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -69,7 +69,7 @@ var relearn_searchindex = [
     "description": "propagation 包提供 W3C Baggage 兼容的跨进程 K-V 上下文传播，扩展自单一 X-Zeus-Cluster Header，支持用户自定义任意 K-V（如 tenant.id / feature.flag / region）的全链路透传。\n与 routing 的关系 维度 routing propagation 范围 仅 zeus.cluster 单字段 任意 K-V 协议 X-Zeus-Cluster Header / gRPC metadata Baggage Header（W3C 标准） 实现 基于 propagation，同步到 Bag W3C baggage 编解码 + Bag/Entry 数据结构 routing.WithCluster 同时写入 ctx 本地值 + propagation Bag，routing.FromContext 优先读 ctx 本地值，缺失时从 Bag 兜底。\n自动传播矩阵（用户零感知） 位置 行为 server/http 入口 clusterInjector 自动 ExtractHTTP 注入 ctx plugins/server/grpc 入口 clusterInterceptor 自动 ExtractMetadataMulti client.Do 出口 自动 InjectHTTP 写入 Baggage Header plugins/client/grpc 出口 UnaryInterceptor 自动 InjectMetadataMulti proxy 反向代理 HTTP Header 自然透传（httputil.ReverseProxy 默认行为） log 包 自动从 ctx 读 baggage entries 写成 Field plugins/middleware/tracing 自动写 span attribute（每个 K-V 一个） plugins/middleware/metrics 默认不加 baggage label（避免基数爆炸），用户通过 WithBaggageLabels 显式声明 核心 API 1import \"github.com/go-zeus/zeus/propagation\" 2 3// 业务代码注入 K-V（一次性） 4ctx = propagation.With(ctx, \"tenant.id\", \"acme\") 5ctx = propagation.With(ctx, \"feature.flag\", \"beta\") 6 7// 业务代码读取 8v, ok := propagation.Get(ctx, \"tenant.id\") 9 10// 手动注入/提取（仅在不走 zeus client/server 时需要） 11propagation.InjectHTTP(ctx, req.Header) 12ctx = propagation.ExtractHTTP(ctx, r.Header) 不自动传播的场景 绕过 Zeus 抽象时需手动调用：",
     "tags": [],
     "title": "上下文传播",
-    "uri": "/guide/propagation/index.html"
+    "uri": "/zeus/guide/propagation/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 快速开始",
@@ -77,7 +77,7 @@ var relearn_searchindex = [
     "description": "Zeus 用 4 层 API 覆盖不同用户。不允许越层泄漏概念——L1 用户不应感知 Component / Container / Lifecycle 等内部接口名。\n层级概览 层 用户 入口 暴露概念 目标 L1 学习者 / 单进程 demo zeus.Run(cfg, handler) 仅 App + Config 5 行启动 L2 个人开发者 / 配置驱动 zeus.Run(cfgWithRegistry, handler) App + Config + Registry（URL） 改配置即可 L3 小团队 / 代码定制 app.NewApp(opts ...AppOption) Server + Logger + Registry + … 类型装配 L4 定制需求 / 完全控制 components.NewApp(comps ...any) 全部组件接口 永久逃生通道 L1：5 行启动 1app.Run(\u0026app.Config{Port: 8080}, http.HandlerFunc(handler)) 仅暴露 App 和 Config 两个概念。其余全部默认装配。",
     "tags": [],
     "title": "4 层 API",
-    "uri": "/getting-started/layered-api/index.html"
+    "uri": "/zeus/getting-started/layered-api/index.html"
   },
   {
     "breadcrumb": "Zeus",
@@ -85,7 +85,7 @@ var relearn_searchindex = [
     "description": "",
     "tags": [],
     "title": "架构设计",
-    "uri": "/architecture/index.html"
+    "uri": "/zeus/architecture/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -93,7 +93,7 @@ var relearn_searchindex = [
     "description": "三件套联动模式：构造期注入 → 中间件链自动埋点 → 优雅关闭时 batch flush。\n1import ( 2 \"github.com/go-zeus/zeus/middleware\" 3 \"github.com/go-zeus/zeus/middleware/recovery\" 4 metricsmw \"github.com/go-zeus/zeus/plugins/middleware/metrics\" 5 tracingmw \"github.com/go-zeus/zeus/plugins/middleware/tracing\" 6 \"github.com/go-zeus/zeus/plugins/metrics/prometheus\" 7 \"github.com/go-zeus/zeus/plugins/trace/otel\" 8) 9 10meter := prometheus.New(prometheus.WithNamespace(\"zeus\")) 11tracer := otel.New(otel.WithServiceName(\"my-app\")) 12 13// 链顺序：recovery → tracing → metrics（外→内） 14chain := middleware.NewChain(recovery.New(), tracingmw.New(tracer), metricsmw.New(meter)) 15 16// /metrics 端点：mux.Handle(\"/metrics\", prometheus.HTTPHandler()) 17// 优雅关闭时 TraceComponent.OnStop 调用 tracer.Close()，OTel batch flush 完成 Metrics 接口 职责 Meter 工厂接口，创建 Counter/Histogram/Gauge Counter 单调递增计数器 Histogram 分布统计（请求耗时等） Gauge 瞬时值（连接数等） 内置：metrics/noop（默认装配时使用） 插件：plugins/metrics/prometheus",
     "tags": [],
     "title": "可观测性",
-    "uri": "/guide/observability/index.html"
+    "uri": "/zeus/guide/observability/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 参考文档",
@@ -101,7 +101,7 @@ var relearn_searchindex = [
     "description": "基于 go-zero / kratos / kitex / dapr / gin 等业界标杆框架的横向对比，识别 zeus 当前能力缺口并提出补充建议。\n一、能力对照矩阵 维度 go-zero kratos kitex dapr zeus 当前 评估 服务发现/注册 ✓ ✓ ✓ ✓ ✓(memory/etcd) 持平 负载均衡 ✓ ✓ ✓(高级) ✓ ✓(random/round_robin) 持平 熔断 ✓ ✓ ✓ ✗ ✓(counter+cluster) 领先 限流 ✓ ✓ ✓ ✓ ✓(token+cluster) 领先 重试 ✓ ✓ ✓ ✗ ✓(exponential+cluster) 领先 链路追踪 ✓OTel ✓OTel ✓OTel ✓OTel ✓OTel 持平 指标 ✓Prom ✓Prom ✓Prom ✓Prom ✓Prom 持平 日志 ✓ ✓ ✓ ✓ ✓slog 持平 反向代理 ✗ ✗ ✗ ✗ ✓(HTTP/WS/SSE/gRPC) 领先 集群路由 ✗ ✗ ✗ ✗ ✓(X-Zeus-Cluster) 原创 配置中心 ✓ ✓ ✓ ✓ ✓(file/etcd/k8s) 持平 MQ 抽象 ✗ ✗ ✗ ✓(BuildingBlock) ✓(memory/kafka/nats) 持平 任务调度 ✗ ✗ ✗ ✗ ✓(interval/cron) 领先 数据库抽象 ✓sqlx ✓(data) ✗ ✓ ✓(sql/mysql/postgres/sqlite) 持平 缓存抽象 ✓ ✓ ✗ ✓ ✓(memory/redis) 持平 跨进程事务 ✗ ✗ ✗ ✓(workflow) ✓(tx_id 透传) 领先 TLS / mTLS ✓ ✓ ✓ ✓ ✓ ✅ 已实现 pprof 自动注册 ✓ ✓ ✓ ✗ ✓ ✅ 已实现 业务错误码 ✓ ✓(errors) ✓ ✗ ✓ ✅ 已实现 参数校验 ✗ ✗ ✗ ✗ ✓ ✅ 已实现 通用 batch ✓ ✗ ✗ ✗ ✓ ✅ 已实现 分布式 ID ✓ ✗ ✗ ✗ ✓ ✅ 已实现 testutil ✓ ✓ ✗ ✗ ✓ ✅ 已实现 分页辅助 ✗ ✗ ✗ ✗ ✓ ✅ 已实现 二、优化优先级 ✅ P0：生产硬伤（已完成） 1. TLS / mTLS 支持 ✅ 现状：已完成 server/http.TLS(cfg *tls.Config) Option — 服务端 HTTPS / mTLS server/http.TLSFiles(certFile, keyFile string) Option — 从文件加载证书 client.WithTLS(cfg *tls.Config) Option — 客户端 TLS（含 mTLS） client.WithTransport(rt http.RoundTripper) Option — 自定义连接池 测试：server/http/tls_test.go 覆盖 4 个场景（默认/WithConfig/WithFiles/mTLS） 用法： 1// HTTPS server 2srv := http.NewHTTP(http.TLS(\u0026tls.Config{Certificates: []tls.Certificate{cert}})) 3 4// mTLS server（双向校验） 5srv := http.NewHTTP(http.TLS(\u0026tls.Config{ 6 Certificates: []tls.Certificate{cert}, 7 ClientAuth: tls.RequireAndVerifyClientCert, 8 ClientCAs: clientCAs, 9})) 10 11// HTTPS client 12c := client.NewClient(client.WithTLS(\u0026tls.Config{InsecureSkipVerify: true})) 2. pprof 诊断端点自动注册 ✅ 现状：已完成 app.WithPprof(port int) AppOption — 独立端口的 pprof server 端点：/debug/pprof/{cmdline,profile,symbol,trace,heap,goroutine,allocs,block,mutex} 安全设计：独立端口隔离（生产可在防火墙层屏蔽），不影响业务流量 用法： 1a := app.NewApp( 2 app.AddServer(http.NewHTTP()), 3 app.WithPprof(6060), // pprof 独立端口 4) ✅ P1：业务高频（已完成） 3. errors 包（Kratos 风格业务错误码）✅ 现状：已实现 errors/ 包 API：errors.New(reason, msg, code) / errors.Is / errors.As / FromError 特性：业务错误码 + HTTP 状态码映射 + Metadata 4. validation 泛型校验 ✅ 现状：已实现 validation/ 包 API：链式 validation.New().Add(field, val, rules...).Validate() 规则：Required / MinLen / MaxLen / Min / Max / Email / Regex 等 5. testutil 测试辅助 ✅ 现状：已实现 testutil/ 包 API：WaitUntil / NewMockRegistry / NewHTTPTestServer 等 6. snowflake 分布式 ID ✅ 现状：已实现 snowflake/ 包 特性：含时钟回拨保护 ✅ P2：增强（已完成） 7. batch 通用批处理 ✅ 现状：已实现 batch/ 包 API：batch.New(maxSize, maxWait, do).Add(item) 用途：DB bulk insert / HTTP 调用聚合 8. page 分页辅助 ✅ 现状：已实现 page/ 包 API：page.Page / page.Sort / page.Result[T] 三、不补充的能力（与 zeus 哲学冲突） 能力 原因 API DSL / 代码生成（.api / .proto → server） 违反\"内部复杂 + 外部简单\"原则；与 4 层渐进暴露冲突 ORM / Schema Migration 业务工具域，与\"薄封装 stdlib\"原则冲突 Stream 抽象（RxGo 风格） SSE/WebSocket 已覆盖实际场景 分布式事务协调器 业务侧选 Seata/TCC/Saga，仅保留 tx_id 透传 Hot Reload 配置热更已有（config 包），代码热更交给 air/reflex GraphQL / gRPC-Web 按需补充，非主流 四、实施路径 P0 阶段（生产硬伤） ├─ server/http: TLS Option + 测试 ├─ client: TLS / Transport Option + 测试 └─ app/options.go: WithPprof() Option + 测试 P1 阶段（业务高频） ├─ errors 包: Error 类型 + HTTP/gRPC 映射 + 测试 ├─ validation 包: 链式 API + 内置规则 + 测试 ├─ testutil 包: mock + builder + helper + 测试 └─ snowflake 包: Generator + 时钟回拨保护 + 测试 P2 阶段（增强） ├─ batch 包: Batcher + 测试 └─ page 包: Page + Sort + Filter + Result + 测试 五、与现有架构的兼容性 所有新增功能都通过 Option 模式接入，不破坏 L1-L4 现有 API 主仓零依赖原则不变（TLS 用标准库 crypto/tls；pprof 用 net/http/pprof） 中文注释、Go 1.22+ 泛型、所有新代码必须有测试 与 utils 包现有的工具集风格一致（命名、Option 模式、文档注释）",
     "tags": [],
     "title": "优化与路线图",
-    "uri": "/reference/optimization-plan/index.html"
+    "uri": "/zeus/reference/optimization-plan/index.html"
   },
   {
     "breadcrumb": "Zeus",
@@ -109,7 +109,7 @@ var relearn_searchindex = [
     "description": "API 稳定性 — 🔒稳定 / 🧪实验 / 🔬内部分级 插件 BOM — 依赖版本治理策略 优化与路线图 — 业界标杆横向对比 + P0/P1/P2 路线图 变更日志 — 每版本变更记录 治理文件 贡献指南 安全政策 行为准则",
     "tags": [],
     "title": "参考文档",
-    "uri": "/reference/index.html"
+    "uri": "/zeus/reference/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -117,7 +117,7 @@ var relearn_searchindex = [
     "description": "proxy 包提供多协议反向代理，统一 http.Handler 入口按协议自动嗅探分流。\n1import ( 2 \"net/http\" 3 \"net/url\" 4 \"github.com/go-zeus/zeus/proxy\" 5 \"github.com/go-zeus/zeus/balancer/roundrobin\" 6) 7 8// 静态模式 9target, _ := url.Parse(\"http://127.0.0.1:9000\") 10p := proxy.New(proxy.WithSelector(proxy.NewStaticSelector(target))) 11http.ListenAndServe(\":8081\", p) 12 13// 动态模式（服务发现 + 集群路由） 14p := proxy.New(proxy.WithSelector( 15 proxy.NewDiscoverySelector(\"api-svc\", dis, roundrobin.New()), 16)) 支持的协议 协议 实现 HTTP/HTTPS 基于 httputil.ReverseProxy，自动注入 X-Forwarded-For/X-Real-IP/X-Request-ID WebSocket Hijack + raw io.Copy 透传（nginx 风格，不解析 RFC6455 帧） SSE 禁用缓冲 + Flusher，串行 read-write-flush 保证事件顺序 gRPC 走独立 plugin 模块 plugins/proxy/grpc，独立监听端口（HTTP/2 多路复用） Selector 接口 抽象后端选择：",
     "tags": [],
     "title": "反向代理",
-    "uri": "/guide/proxy/index.html"
+    "uri": "/zeus/guide/proxy/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -125,7 +125,7 @@ var relearn_searchindex = [
     "description": "Zeus 中间件基于 Interceptor 接口和 Chain 类型组合。\n内置中间件 包 职责 middleware/recovery panic 恢复（默认装配） middleware/requestid 请求 ID 注入（默认装配） middleware/accesslog 访问日志（默认装配） middleware/timeout 请求超时控制 middleware/clustering cluster 自动注入 plugins 中间件 包 职责 plugins/middleware/tracing 自动 trace 埋点 + cluster attr plugins/middleware/metrics 自动 metrics 埋点 + cluster label 链式组合 1import ( 2 \"github.com/go-zeus/zeus/middleware\" 3 \"github.com/go-zeus/zeus/middleware/recovery\" 4 metricsmw \"github.com/go-zeus/zeus/plugins/middleware/metrics\" 5 tracingmw \"github.com/go-zeus/zeus/plugins/middleware/tracing\" 6) 7 8// 链顺序：外 → 内 9chain := middleware.NewChain( 10 recovery.New(), 11 tracingmw.New(tracer), 12 metricsmw.New(meter), 13) L1 vs L3 默认链差异 层 默认中间件 说明 L1/L2 (app.Run) requestid → accesslog → recovery（/health 等端点单独路由，非中间件） 自动包装 L3 (app.NewApp) 空（用户显式 WithMiddleware） 用户完全控制 L3 不自动包装的原因：用户已直接构造 http.NewHTTP()，对 server 中间件链有完全控制。",
     "tags": [],
     "title": "中间件",
-    "uri": "/guide/middleware/index.html"
+    "uri": "/zeus/guide/middleware/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -133,7 +133,7 @@ var relearn_searchindex = [
     "description": "client 包提供带集群路由 + baggage 传播的 HTTP 客户端。第一参数 name 是服务名（用于服务发现查找实例）。\n1import \"github.com/go-zeus/zeus/client\" 2 3c := client.NewClient(\"my-service\", 4 client.Discovery(dis), // 启用服务发现（registry.Discovery） 5 client.LoadBalance(roundrobin.New()),// 负载均衡策略 6 client.WithTimeout(5*time.Second), 7) 8// ctx 经由 req 携带；client.Do 自动透传 cluster + baggage 9req, _ := http.NewRequestWithContext(ctx, http.MethodGet, \"http://my-service/api\", nil) 10resp, err := c.Do(req) 自动行为 集成 行为 集群路由 resolveCluster 读 ctx 的 cluster → 选 cluster 实例 → 注入 X-Zeus-Cluster Header Baggage 传播 自动 InjectHTTP(ctx, req.Header) 写入 Baggage Header Tracing 自动创建 client span（如有 tracer） Metrics 自动记录 client request latency（如有 meter） 其他 Option Option 说明 WithHTTPClient(hc *http.Client) 注入底层 *http.Client WithTLS(cfg *tls.Config) 启用 TLS WithTransport(rt *http.Transport) 注入自定义 transport WithTimeout(d) 请求超时 type Client = HTTPClient 别名保留向后兼容。主包仅提供 HTTP 客户端——gRPC 等其他协议走 plugins/client/\u003cprotocol\u003e 独立 module（HTTP/gRPC 请求模型本质不同，强行抽象会失去类型安全）。",
     "tags": [],
     "title": "客户端",
-    "uri": "/guide/client/index.html"
+    "uri": "/zeus/guide/client/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -141,7 +141,7 @@ var relearn_searchindex = [
     "description": "Zeus 提供 database 包作为薄封装 stdlib 抽象，不做 ORM（用户可自由选 sqlx / gorm / ent / sqlc）。\n核心概念 概念 说明 DB / Tx / Rows / Row 薄接口，签名几乎对齐 *sql.DB（学习成本零） DBOptions 连接池配置（Driver/DSN/MaxOpenConns/…） TxOption 事务选项（WithIsolation / WithReadOnly） WithTx/FromTx 同进程事务传播（多个 Repository 共享 Tx） WithTxID/TxIDFromContext/EnsureTxID 跨服务 tx_id 传播（审计/排查用，不做 2PC） database/sql 内置实现：薄封装 stdlib *sql.DB + 自动 trace/metrics/tx_id DatabaseComponent components 适配器：OnStart Ping，OnStop Close 自动集成矩阵 每次 Query/Exec 触发：",
     "tags": [],
     "title": "数据库",
-    "uri": "/guide/database/index.html"
+    "uri": "/zeus/guide/database/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -149,7 +149,7 @@ var relearn_searchindex = [
     "description": "概念 说明 Cache 接口：Get/Set/Delete/Has/Close（与 Redis API 对齐） Item 载体：Key/Value/TTL Option WithTTL(d)（默认无 TTL = 永久） cache/memory 内置实现：sync.Map + TTL 双路径清理（懒 + 后台周期扫描） CacheComponent components 适配器：OnStop Close（停后台 goroutine） 自动集成矩阵 集成 行为 trace span cache.get/cache.set/cache.delete/cache.has；attrs: cache，可选 cache_key（默认关闭避免敏感数据） metrics counter cache_op_total{cache,op,status}（status: hit/miss/ok） + histogram cache_op_duration{cache,op} 使用方式 1import ( 2 \"github.com/go-zeus/zeus/cache\" 3 \"github.com/go-zeus/zeus/cache/memory\" 4) 5 6c := memory.New( 7 memory.WithTracer(tracer), 8 memory.WithMeter(meter), 9 memory.WithName(\"user-cache\"), 10 memory.WithCleanupInterval(time.Minute), // 默认 60s 11) 12defer c.Close() 13 14_ = c.Set(ctx, \"user:1\", user, cache.WithTTL(5*time.Minute)) 15v, ok := c.Get(ctx, \"user:1\") // (user, true) 或 (nil, false) 16_ = c.Delete(ctx, \"user:1\") 设计权衡 维度 选择 理由 cache 后台清理 60s 默认 + 懒清理 兼顾内存与 CPU 开销 cache key 记录 默认关闭 避免敏感数据进入 trace 接入 Redis 1import ( 2 \"github.com/redis/go-redis/v9\" 3 \"github.com/go-zeus/zeus/cache\" 4 redis \"github.com/go-zeus/zeus/plugins/cache/redis\" 5) 6 7cli := redis.NewClient(\u0026redis.Options{Addr: \"127.0.0.1:6379\"}) 8c := redis.New(cli, redis.WithTracer(tracer), redis.WithMeter(meter)) 9defer c.Close() // 关闭 client（WithManagedClient(false) 可保留共享 client） 10 11// 复杂类型需自行序列化 12payload, _ := json.Marshal(user) 13_ = c.Set(ctx, \"user:1\", payload, cache.WithTTL(5*time.Minute)) 完整示例参见 examples/14-cache/：Set/Get/Has/Delete/TTL 过期。",
     "tags": [],
     "title": "缓存",
-    "uri": "/guide/cache/index.html"
+    "uri": "/zeus/guide/cache/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -157,7 +157,7 @@ var relearn_searchindex = [
     "description": "mq 包提供发布/订阅（pub/sub）的统一抽象，参考 Dapr Building Block 设计。\n概念 说明 Message 消息体（Topic + Payload + Headers） Handler 消息处理函数（返回 nil=ack，error=nack） Publisher 发布者接口（Publish + Close） Subscriber 订阅者接口（Subscribe + Close） Broker 完整代理（同时实现 Publisher + Subscriber） memory.Broker 内置实现：channel fan-out，无缓冲反压，自动 baggage 注入/提取 MQComponent components 适配器：声明式注册 + 自动启停 设计权衡 维度 选择 理由 抽象层级 只抽象 topic / payload / headers 屏蔽 Kafka partition / RabbitMQ exchange 等厂商专属语义 ack 语义 Handler 返回 error = nack 不同实现可映射到不同动作（memory 走 ErrorHandler，Kafka 不 commit offset） 内置实现 进程内 channel + 无缓冲 零依赖、保证不丢消息，反压慢消费者（牺牲吞吐换可靠） 持久化 不持久化 用作单进程事件总线 / 测试 mock；生产用 plugins Baggage 传播 Publish 自动注入 msg.Headers[“baggage”]，handler 自动 extract 全链路 tenant.id / cluster 等 K-V 透传 并发模型 每订阅者独立 goroutine fan-out 隔离故障 使用方式 1import ( 2 \"github.com/go-zeus/zeus/components\" 3 \"github.com/go-zeus/zeus/mq\" 4 \"github.com/go-zeus/zeus/mq/memory\" 5) 6 7// 1. 直接使用 Broker（无 components） 8broker := memory.New() 9defer broker.Close() 10 11_ = broker.Subscribe(ctx, \"orders.created\", func(ctx context.Context, msg *mq.Message) error { 12 return nil 13}) 14_ = broker.Publish(ctx, \"orders.created\", \u0026mq.Message{Payload: []byte(\"order-1\")}) 15 16// 2. 自动装配 17app := components.NewApp( 18 components.NewMQComponent(memory.New()), 19 components.NewMQSubscription(\"orders.created\", handleOrder), 20 components.NewMQSubscription(\"log.all\", handleLog), 21) 22app.Run() Baggage 自动传播 位置 行为 Publish 出口 自动 InjectMetadata(ctx, msg.Headers)：ctx baggage → msg.Headers[\"baggage\"]（W3C 编码） handler 入口 自动 ExtractMetadata(ctx, msg.Headers)：msg.Headers[\"baggage\"] → handler ctx Handler 内读取 propagation.Get(ctx, \"tenant.id\") 直接拿到 完整示例参见 examples/15-mq/：3 个订阅者（不同 topic）+ baggage 全链路传播 + 优雅关闭。",
     "tags": [],
     "title": "消息队列",
-    "uri": "/guide/mq/index.html"
+    "uri": "/zeus/guide/mq/index.html"
   },
   {
     "breadcrumb": "Zeus \u003e 用户指南",
@@ -165,6 +165,6 @@ var relearn_searchindex = [
     "description": "job 包提供声明式周期性任务调度抽象。\n概念 说明 Spec 任务规格（Name + Schedule/Every + Handler + Timeout） Scheduler 调度器接口（Register/Start/Stop） interval.Scheduler 内置实现：固定间隔，每 Job 独立 goroutine + Ticker JobComponent components 适配器：声明式注册 + 自动启停 JobRegistration 单个 Job 包装为组件 设计权衡 维度 选择 理由 内置调度器 time.Ticker 固定间隔 零依赖、覆盖 80% 用例（心跳/上报/清理） Cron 表达式 放 plugins/job/cron cron 解析复杂，且需要 robfig/cron 依赖 首次执行 立即执行（不延迟一个周期） 心跳类任务不应延迟首次上报 并发模型 每 Job 独立 goroutine 隔离故障，单 Job panic 不影响其他 错误处理 默认 log.Error，可注入 ErrorHandler 用户可对接告警/重试系统 使用方式 1import ( 2 \"github.com/go-zeus/zeus/components\" 3 \"github.com/go-zeus/zeus/job\" 4 \"github.com/go-zeus/zeus/job/interval\" 5) 6 7heartbeat := job.Spec{ 8 Name: \"heartbeat\", 9 Every: 30 * time.Second, 10 Handler: func(ctx context.Context) error { 11 return reportHeartbeat(ctx) 12 }, 13 Timeout: 5 * time.Second, 14} 15 16app := components.NewApp( 17 components.NewJobComponent(interval.New()), 18 components.NewJobRegistration(heartbeat), 19) 20app.Run() URL scheme 切换调度器实现 通过 job.NewSchedulerFromURL 用 URL 字符串切换 interval / cron 实现：",
     "tags": [],
     "title": "任务调度",
-    "uri": "/guide/job/index.html"
+    "uri": "/zeus/guide/job/index.html"
   }
 ]
