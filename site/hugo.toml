@@ -2,6 +2,8 @@
 # 主题：Hugo Relearn（纯 Hugo 实现，无 Node 依赖）
 # 仓库：https://github.com/McShelby/hugo-theme-relearn
 
+# 本地预览默认值；CI 部署时由 .github/workflows/docs.yml 的 matrix 注入 --baseURL 覆盖
+# （GitHub Pages 与自托管各自正确的 baseURL，避免跨域名资源 404）
 baseURL = "https://go-zeus.github.io/zeus/"
 languageCode = "zh-CN"
 defaultContentLanguage = "zh"

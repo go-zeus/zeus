@@ -44,10 +44,21 @@ permissions:
 
 jobs:
   build:
-    name: Build Hugo site
+    name: Build Hugo site (${{ matrix.target }})
     runs-on: ubuntu-latest
-    outputs:
-      artifact: ${{ steps.upload-artifact.outputs.artifact-id }}
+    # matrix 并行构建：每个部署目标用各自的 baseURL，避免「build 一次部署两处」时
+    # 静态资源链接指向单一域名、在另一个域名下 404
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [pages, selfhosted]
+        include:
+          - target: pages
+            base_url: "https://go-zeus.github.io/zeus/"
+            artifact_name: zeus-docs-pages
+          - target: selfhosted
+            base_url: "https://docs.cncf.vip/go-zeus/"
+            artifact_name: zeus-docs-selfhosted
     steps:
       - uses: actions/checkout@v4
         with:
@@ -70,13 +81,12 @@ jobs:
         working-directory: site
         env:
           HUGO_ENV: production
-        run: hugo --minify --gc --baseURL "https://docs.go-zeus.dev/"
+        run: hugo --minify --gc --baseURL "${{ matrix.base_url }}"
 
       - name: Upload artifact
-        id: upload-artifact
         uses: actions/upload-artifact@v4
         with:
-          name: zeus-docs
+          name: ${{ matrix.artifact_name }}
           path: site/public
           retention-days: 7
 
@@ -90,7 +100,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: zeus-docs
+          name: zeus-docs-pages
           path: public
 
       - name: Deploy to GitHub Pages
@@ -125,7 +135,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: zeus-docs
+          name: zeus-docs-selfhosted
           path: public
 
       - name: Configure SSH
