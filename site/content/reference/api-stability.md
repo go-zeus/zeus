@@ -121,6 +121,17 @@
 
 3. **行为变更（不改签名）**：如果改变行为会影响用户，必须在 CHANGELOG 明确标注，并在 release notes 中突出说明。
 
+## Deprecation Policy
+
+为让用户平滑迁移，标记为 `// Deprecated:` 的符号遵循以下保留周期：
+
+- **保留期**：自标记起至少保留到 `v1.0.0`；v1.0.0 后保留至下一个 minor 版本边界
+- **删除门槛**：仅在 minor 版本边界移除，**patch 版本绝不删除**已弃用符号
+- **公示要求**：每个 deprecated 符号必须在 CHANGELOG 的 `Deprecated` 段记录替代方案与迁移示例
+- **当前已弃用清单**：见 [CHANGELOG](./changelog.md) `[Unreleased]` 的 `Deprecated` 段（当前为 `event.OneEvent` / `event.OnceEvent`）
+
+> 注：「辅助工具包」（`batch`、`safe`、`utils/*`）按上方「不冻结的内容」声明，本身不承诺稳定；但其破坏性变更仍会遵循本 Policy 给出迁移期，不会静默删除。
+
 ## 当前 v0.x 阶段的破坏性变更窗口
 
 `v0.1.0-alpha.1` ~ `v0.9.x` 期间，"实验"和"内部"级 API 可能在任何 minor 版本破坏。

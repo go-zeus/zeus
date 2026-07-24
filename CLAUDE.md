@@ -203,6 +203,11 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | errors | `errors.New(reason, message, code)` / `Newf` / `FromError(err)` | Kratos 风格业务错误码：reason+message+code+metadata，HTTP/gRPC 双协议自动映射，兼容标准 `errors.Is/As` |
 | metadata | `metadata.MD`（`map[string]string`） + `metadata.NewContext`/`FromContext`/`Get`/`Set`/`Delete`/`MergeContext`/`Copy`/`Equal` | 请求级 K-V 元数据（context 传递，单 context 无锁）；与 propagation 的区别：metadata 是进程内 context 值，不跨进程透传 |
 | safe | `safe.GO(func() error)` | 带 panic 恢复的 goroutine 启动器（避免单 goroutine panic 拖垮进程） |
+| timex | `timex.Now()` / `NowUnix()` / `Format(t, layout...)` / `Parse(s, layout...)` + 布局常量 `DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek`） | 时间工具：布局常量 + 可变参数默认布局，替代冗长的 `time.Format`（原 `utils/time` 已重命名） |
+| event | `event.NewEvent()` → `Watch()/Trigger()/Close()`（多次触发，多 watcher 独立通道）；`event.NewLatch()` → `Trigger()/Done()/HasFired()` | 事件通知：Event 多次触发（可选 `WithKeepOldest` 合并策略），Latch 一次性事件（多等待方共享完成信号） |
+| set | `set.FromSlice(s)` / `New[T]()` → `*Set[T].Add/Remove/Contains/Union/Intersect/Difference/Clone/Equal` | 泛型集合：基于 map 的集合代数，**指针接收者引用语义**（`s2:=s1` 共享，独立副本用 `Clone()`） |
+| random | `random.RangeRand(min,max)` / `Int63()` / `Bytes(n)`（crypto 安全）；`FastRange`/`FastInt`/`FastString`（math/rand/v2 快速） | 随机数双轨：安全路径（令牌/密钥）+ 快速路径（jitter/测试数据），按安全需求显式选择 |
+| banner | `import _ ".../utils/banner"` | 框架启动 logo：TTY 门控（非终端不输出）+ `ZEUS_NO_BANNER` 环境变量关闭 + ldflags 版本注入 |
 
 ### 构造与使用
 
