@@ -34,9 +34,6 @@ import (
 // —— 常量 ——
 
 const (
-	// 总位数
-	totalBits = 63 // 1 位符号位保留
-
 	// 各部分位数
 	machineIDBits = 10
 	sequenceBits  = 12

@@ -230,7 +230,8 @@ func TestFastString(t *testing.T) {
 		t.Error("FastString(0) 应返回空串")
 	}
 	// 两次生成应（极大概率）不同
-	if FastString(32) == FastString(32) {
+	a, b := FastString(32), FastString(32)
+	if a == b {
 		t.Error("两次 FastString(32) 相同（极不应该）")
 	}
 }
