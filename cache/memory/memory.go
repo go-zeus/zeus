@@ -164,7 +164,9 @@ func (c *cacheImpl) Get(ctx context.Context, key string) (any, bool) {
 	}
 	e := v.(*entry)
 	if e.expired(time.Now()) {
-		c.data.Delete(key) // 懒清理
+		// 懒清理 + ABA 防护：仅当 map 中仍是这个过期 entry 才删除。
+		// 若并发 Set 已写入新值，CompareAndDelete 不会命中，避免误删新值导致下一次 Get miss。
+		c.data.CompareAndDelete(key, e)
 		c.recordMetric("get", "miss", time.Since(start))
 		span.End()
 		return nil, false

@@ -10,11 +10,11 @@ import (
 func TestShutdown(t *testing.T) {
 	sigs := Shutdown()
 
+	// 仅包含真正的"停止"信号；SIGHUP 语义为 reload（重载配置），不纳入关闭列表
 	wantSigs := []os.Signal{
 		syscall.SIGTERM,
 		syscall.SIGINT,
 		syscall.SIGQUIT,
-		syscall.SIGHUP,
 	}
 
 	for _, want := range wantSigs {
@@ -30,9 +30,16 @@ func TestShutdown(t *testing.T) {
 		}
 	}
 
+	// SIGHUP 不应出现（reload 信号，误纳入会致 reload 场景误杀进程）
+	for _, sig := range sigs {
+		if sig == syscall.SIGHUP {
+			t.Error("Shutdown 不应包含 SIGHUP：语义为 reload 而非 shutdown")
+		}
+	}
+
 	// 同时验证列表长度
-	if len(sigs) != 4 {
-		t.Errorf("期望返回 4 个信号, 实际 = %d", len(sigs))
+	if len(sigs) != 3 {
+		t.Errorf("期望返回 3 个信号, 实际 = %d", len(sigs))
 	}
 }
 

@@ -70,24 +70,30 @@ func (p *proxy) composeDirector(target *url.URL) func(*http.Request) {
 		// 设置目标 scheme/host
 		req.URL.Scheme = target.Scheme
 		req.URL.Host = target.Host
+		p.injectForwardHeaders(target, req)
+	}
+}
 
-		// 追加 X-Forwarded-For（保留链）
-		clientIP := remoteIP(req)
-		if prior, ok := req.Header["X-Forwarded-For"]; ok {
-			clientIP = strings.Join(prior, ", ") + ", " + clientIP
-		}
-		req.Header.Set("X-Forwarded-For", clientIP)
-		req.Header.Set("X-Real-IP", remoteIP(req))
+// injectForwardHeaders 注入反向代理标准转发头（X-Forwarded-For / X-Real-IP / X-Request-ID）
+// 及用户自定义 Director。HTTP 与 SSE 两条转发路径共用，保证注入一致（修复 SSE 路径
+// 未注入转发头导致后端 RemoteAddr/XFF 链断裂、日志无法关联 X-Request-ID 的问题）。
+func (p *proxy) injectForwardHeaders(target *url.URL, req *http.Request) {
+	// 追加 X-Forwarded-For（保留链）
+	clientIP := remoteIP(req)
+	if prior, ok := req.Header["X-Forwarded-For"]; ok {
+		clientIP = strings.Join(prior, ", ") + ", " + clientIP
+	}
+	req.Header.Set("X-Forwarded-For", clientIP)
+	req.Header.Set("X-Real-IP", remoteIP(req))
 
-		// 注入 X-Request-ID（缺失时生成）
-		if req.Header.Get("X-Request-ID") == "" {
-			req.Header.Set("X-Request-ID", uuid.New())
-		}
+	// 注入 X-Request-ID（缺失时生成）
+	if req.Header.Get("X-Request-ID") == "" {
+		req.Header.Set("X-Request-ID", uuid.New())
+	}
 
-		// 用户自定义 Director 叠加
-		if p.userDirector != nil {
-			p.userDirector(target, req)
-		}
+	// 用户自定义 Director 叠加
+	if p.userDirector != nil {
+		p.userDirector(target, req)
 	}
 }
 

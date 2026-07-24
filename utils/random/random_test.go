@@ -183,6 +183,58 @@ func TestBytes_Zero(t *testing.T) {
 	}
 }
 
+// —— 快速伪随机路径测试 ——
+
+func TestFastRange_InclusiveBounds(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		v := FastRange(5, 7)
+		if v < 5 || v > 7 {
+			t.Fatalf("FastRange(5,7) = %d, 不在闭区间", v)
+		}
+	}
+	// 单点区间
+	if v := FastRange(9, 9); v != 9 {
+		t.Errorf("FastRange(9,9) = %d, want 9", v)
+	}
+}
+
+func TestFastRange_PanicOnInverted(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("FastRange(min>max) 应 panic")
+		}
+	}()
+	_ = FastRange(10, 1)
+}
+
+func TestFastInt_Range(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		v := FastInt(100)
+		if v < 0 || v >= 100 {
+			t.Fatalf("FastInt(100) = %d, 不在 [0,100)", v)
+		}
+	}
+}
+
+func TestFastString(t *testing.T) {
+	s := FastString(16)
+	if len(s) != 16 {
+		t.Fatalf("len = %d, want 16", len(s))
+	}
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+			t.Errorf("FastString 含非字母数字字符 %q", c)
+		}
+	}
+	if FastString(0) != "" {
+		t.Error("FastString(0) 应返回空串")
+	}
+	// 两次生成应（极大概率）不同
+	if FastString(32) == FastString(32) {
+		t.Error("两次 FastString(32) 相同（极不应该）")
+	}
+}
+
 // BenchmarkRangeRand 性能基准（参考用）
 //
 // 期望：<200ns/op（crypto/rand.Read 8 字节的开销）

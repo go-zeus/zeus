@@ -141,7 +141,13 @@ func (c *client) applyTransportSettings() {
 		tr = existing
 	}
 	if tr == nil {
-		tr = &http.Transport{}
+		// 复用 http.DefaultTransport 的合理默认值（连接池、各类超时、HTTP2 协商、ProxyFromEnvironment），
+		// 而非 zero-value *http.Transport{}（无超时、不读 HTTP_PROXY、不协商 H2、Dial 无超时）。
+		if base, ok := http.DefaultTransport.(*http.Transport); ok && base != nil {
+			tr = base.Clone()
+		} else {
+			tr = &http.Transport{}
+		}
 	}
 	if c.tlsCfg != nil {
 		tr.TLSClientConfig = c.tlsCfg

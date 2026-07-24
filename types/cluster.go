@@ -67,3 +67,30 @@ func (c *Cluster) GetInstances() []*Instance {
 	}
 	return data
 }
+
+// Clone 返回 Cluster 的浅拷贝快照（新 Instances map + 复制 Labels/Metadata）。
+//
+// Instance 注册后视为只读，故共享 *Instance 指针；仅复制 map 与切片结构。
+// 供 ServiceEntry.Snapshot 调用，使注册中心 GetService 的返回值可被调用方在
+// 无锁下安全遍历，避免与并发的 AddInstance/DelInstance 产生 map panic。
+func (c *Cluster) Clone() *Cluster {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	cp := &Cluster{
+		Name:      c.Name,
+		Instances: make(map[string]*Instance, len(c.Instances)),
+	}
+	if c.Labels != nil {
+		cp.Labels = append([]string(nil), c.Labels...)
+	}
+	if c.Metadata != nil {
+		cp.Metadata = make(metadata.MD, len(c.Metadata))
+		for k, v := range c.Metadata {
+			cp.Metadata[k] = v
+		}
+	}
+	for id, ins := range c.Instances {
+		cp.Instances[id] = ins
+	}
+	return cp
+}

@@ -96,8 +96,11 @@ func FromContext(ctx context.Context) (MD, bool) {
 }
 
 // NewContext 创建一个上下文的元数据
+//
+// 内部对 md 做拷贝，避免调用方之后修改原 map 污染 context 中的值
+// （与 Set/MergeContext/FromContext 的拷贝行为保持一致）。
 func NewContext(ctx context.Context, md MD) context.Context {
-	return context.WithValue(ctx, metadataKey{}, md)
+	return context.WithValue(ctx, metadataKey{}, Copy(md))
 }
 
 // MergeContext 合并到一个上下文中（overwrite 是否覆盖）

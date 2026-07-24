@@ -56,6 +56,15 @@ func (c *ClusterRetrier) Set(key string, factory RetrierFactory) {
 	c.factories[key] = factory
 }
 
+// Delete 移除指定 key 的专用 RetrierFactory。
+// 用于动态 cluster（临时灰度/单元化）下线后回收，避免 factories map 无限增长导致内存泄漏。
+// key 不存在时为 no-op；移除后该 key 回退到 default factory。
+func (c *ClusterRetrier) Delete(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.factories, key)
+}
+
 // NewRetriever 返回一个新的 Retrier。key 默认从 ctx 提取 cluster。
 func (c *ClusterRetrier) NewRetriever(ctx context.Context) retry.Retrier {
 	return c.NewRetrieverForKey(routing.FromContext(ctx))

@@ -3,7 +3,6 @@ package slog
 import (
 	"context"
 	"log/slog"
-	"os"
 
 	"github.com/go-zeus/zeus/log"
 )
@@ -35,8 +34,10 @@ func (s *slogDriver) Log(_ context.Context, level log.Level, msg string, fields 
 	case log.LevelError:
 		s.logger.LogAttrs(context.Background(), slog.LevelError, msg, attrs...)
 	case log.LevelFatal:
+		// slog 无 Fatal 级别，降级为 Error 输出。
+		// 进程退出由 log.Fatal 统一负责（确保 exit 前能 flush writer），
+		// 此处不再调用 os.Exit，避免与 log.Fatal 形成双重退出。
 		s.logger.LogAttrs(context.Background(), slog.LevelError, msg, attrs...)
-		os.Exit(1)
 	}
 }
 

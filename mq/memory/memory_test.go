@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -173,6 +174,53 @@ func TestSubscribe_HandlerError(t *testing.T) {
 	defer mu.Unlock()
 	if !errors.Is(capturedErr, jobErr) {
 		t.Errorf("captured err = %v, want %v", capturedErr, jobErr)
+	}
+}
+
+// TestSubscribe_HandlerPanicRecovered 回归测试：handler panic 必须被 recover，
+// 不得拖垮进程，且该订阅者后续仍能继续处理消息（落实 "fan-out 隔离故障" 承诺）。
+func TestSubscribe_HandlerPanicRecovered(t *testing.T) {
+	var panicSeen atomic.Bool
+	b := New(WithErrorHandler(func(topic string, _ *mq.Message, err error) {
+		if err != nil && strings.Contains(err.Error(), "panic recovered") {
+			panicSeen.Store(true)
+		}
+	}))
+	defer b.Close()
+
+	// 第一条消息触发 panic
+	_ = b.Subscribe(context.Background(), "panic-topic", func(_ context.Context, msg *mq.Message) error {
+		if string(msg.Payload) == "boom" {
+			panic("intentional")
+		}
+		return nil
+	})
+
+	_ = b.Publish(context.Background(), "panic-topic", &mq.Message{Payload: []byte("boom")})
+
+	// 等 panic 被恢复处理
+	deadline := time.Now().Add(time.Second)
+	for !panicSeen.Load() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if !panicSeen.Load() {
+		t.Fatal("panic not recovered within 1s")
+	}
+
+	// 第二条消息应仍能被处理（订阅者存活，进程未崩）
+	got := make(chan string, 1)
+	_ = b.Subscribe(context.Background(), "panic-topic", func(_ context.Context, msg *mq.Message) error {
+		got <- string(msg.Payload)
+		return nil
+	})
+	_ = b.Publish(context.Background(), "panic-topic", &mq.Message{Payload: []byte("after-panic")})
+	select {
+	case v := <-got:
+		if v != "after-panic" {
+			t.Errorf("got %q, want after-panic", v)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("broker did not survive handler panic")
 	}
 }
 

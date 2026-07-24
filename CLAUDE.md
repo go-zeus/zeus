@@ -169,7 +169,7 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | 功能域 | 接口名 | 用户 API | 内置实现 | plugins 实现 |
 |--------|--------|----------|----------|-------------|
 | registry | `Registrar`/`Discovery`/`Watcher` | 纯接口 | `registry/memory` | `plugins/registry/etcd` |
-| balancer | `Balancer` | 纯接口 | `balancer/random,round_robin` | — |
+| balancer | `Balancer` | 纯接口 | `balancer/random,roundrobin` | — |
 | server | `Server` | 纯接口 | `server/http`（含健康检查 + 自动集群路由注入） | `plugins/server/grpc`（含自动集群路由注入） |
 | ~~service~~ | — | **已删除**（职责与 app/components 重叠） | — | — |
 | log | `Writer` | `Logger` 结构体（With/Close） | `log/slog`（cluster Field 自动注入在公共 `Logger` 层，非 slog 专属） | `plugins/log/zap`、`plugins/log/file_rotate` |
@@ -510,7 +510,7 @@ import (
     "net/http"
     "net/url"
     "github.com/go-zeus/zeus/proxy"
-    "github.com/go-zeus/zeus/balancer/round_robin"
+    "github.com/go-zeus/zeus/balancer/roundrobin"
 )
 
 // 静态模式
@@ -520,7 +520,7 @@ http.ListenAndServe(":8081", p)
 
 // 动态模式（服务发现 + 集群路由）
 p := proxy.New(proxy.WithSelector(
-    proxy.NewDiscoverySelector("api-svc", dis, round_robin.New()),
+    proxy.NewDiscoverySelector("api-svc", dis, roundrobin.New()),
 ))
 ```
 
@@ -762,7 +762,7 @@ broker.Publish(ctx, "orders.created", &mq.Message{Payload: []byte("x")})
 | `handler` 入口 | 自动 `ExtractMetadata(ctx, msg.Headers)`：`msg.Headers["baggage"]` → handler ctx |
 | `Handler` 内读取 | `propagation.Get(ctx, "tenant.id")` 直接拿到 |
 
-订阅侧可通过 `MQComponent.OnStart` 时 `GetType[mq.Broker](ctx)` 获取 broker 实例。
+订阅侧可通过 `MQComponent.OnStart` 时 `Type[mq.Broker](ctx)` 获取 broker 实例。
 
 ### 不自动传播的场景
 

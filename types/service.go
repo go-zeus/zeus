@@ -104,6 +104,28 @@ func (s *ServiceEntry) AllCluster() []*Cluster {
 	return data
 }
 
+// Snapshot 返回 ServiceEntry 的深拷贝快照，供调用方在无锁下安全遍历。
+//
+// 解决注册中心 GetService 返回内部指针后，调用方无锁 range Clusters/Instances map
+// 与并发的 AddInstance/DelInstance 产生 "concurrent map iteration and map write" panic。
+// Instance 注册后视为只读，故共享 *Instance 指针；仅复制各级 map 与 Cluster 结构。
+func (s *ServiceEntry) Snapshot() *ServiceEntry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	cp := &ServiceEntry{
+		Name:      s.Name,
+		Clusters:  make(map[string]*Cluster, len(s.Clusters)),
+		Instances: make(map[string]*Instance, len(s.Instances)),
+	}
+	for name, cl := range s.Clusters {
+		cp.Clusters[name] = cl.Clone()
+	}
+	for id, ins := range s.Instances {
+		cp.Instances[id] = ins
+	}
+	return cp
+}
+
 // 兼容 alias：保留旧名称 Service 和 NewService 一个版本，便于下游平滑迁移
 //
 // Deprecated: 使用 ServiceEntry / NewServiceEntry 代替

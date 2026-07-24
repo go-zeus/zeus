@@ -28,9 +28,11 @@ func JoinPaths(absolutePath, relativePath string) string {
 	return scheme + finalPath
 }
 
-func lastChar(str string) uint8 {
+// lastChar 返回字符串最后一个字节；空串返回 0（避免工具函数 panic）。
+// 当前调用方（JoinPaths）已保证入参非空，此处做防御性兜底。
+func lastChar(str string) byte {
 	if str == "" {
-		panic("The length of the string can't be 0")
+		return 0
 	}
 	return str[len(str)-1]
 }

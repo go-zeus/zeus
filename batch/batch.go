@@ -83,10 +83,10 @@ type Batcher[T any] struct {
 	maxSize int
 	maxWait time.Duration
 
-	queue   chan T
-	flushCh chan struct{}
-	stopCh  chan struct{}
-	stopped chan struct{}
+	queue    chan T
+	flushReq chan chan struct{} // 同步 Flush 协调：Flush 发送 ack chan，run loop flush 后关闭
+	stopCh   chan struct{}
+	stopped  chan struct{}
 
 	wg sync.WaitGroup
 
@@ -109,14 +109,14 @@ func New[T any](handler func([]T), opts ...Option) *Batcher[T] {
 	}
 
 	b := &Batcher[T]{
-		handler: handler,
-		maxSize: cfg.maxSize,
-		maxWait: cfg.maxWait,
-		queue:   make(chan T, 1024),
-		flushCh: make(chan struct{}, 1),
-		stopCh:  make(chan struct{}),
-		stopped: make(chan struct{}),
-		pending: make([]T, 0, cfg.maxSize),
+		handler:  handler,
+		maxSize:  cfg.maxSize,
+		maxWait:  cfg.maxWait,
+		queue:    make(chan T, 1024),
+		flushReq: make(chan chan struct{}, 1),
+		stopCh:   make(chan struct{}),
+		stopped:  make(chan struct{}),
+		pending:  make([]T, 0, cfg.maxSize),
 	}
 
 	b.wg.Add(1)
@@ -176,28 +176,17 @@ func (b *Batcher[T]) AddContext(ctx context.Context, item T) error {
 //   - 在调用方 goroutine 中同步执行 handler
 //   - 与后台 run loop 互斥（通过 mu 保护，不会重复处理同一 batch）
 //
-// 适用：测试断言 / 优雅关闭场景
+// Flush 同步刷新所有 pending 元素：阻塞直到 run loop 完成一次 flush。
+//
+// 通过 flushReq 与 run loop 协调（run loop 单线程独占 pending，避免并发 append 竞态）：
+// 调用方发送 ack chan，run loop 收到后 drain queue + flushNow，再关闭 ack。
+// 修复原先 Flush 在锁外 drain queue 与 run loop "已读未入 pending" 元素之间的竞态。
+//
+// 适用：测试断言 / 优雅关闭场景。
 func (b *Batcher[T]) Flush() {
-	b.mu.Lock()
-	// drain queue 中所有就绪元素到 pending（与 run loop 竞争，互不影响）
-	draining := true
-	for draining {
-		select {
-		case item := <-b.queue:
-			b.pending = append(b.pending, item)
-		default:
-			draining = false
-		}
-	}
-	if len(b.pending) == 0 {
-		b.mu.Unlock()
-		return
-	}
-	batch := b.pending
-	b.pending = make([]T, 0, b.maxSize)
-	b.mu.Unlock()
-
-	b.callHandler(batch)
+	ack := make(chan struct{})
+	b.flushReq <- ack
+	<-ack
 }
 
 // Close 关闭批处理器
@@ -254,8 +243,11 @@ func (b *Batcher[T]) run() {
 				b.flushNow()
 			}
 
-		case <-b.flushCh:
+		case ack := <-b.flushReq:
+			// 同步 Flush：drain queue + flush，然后通知调用方
+			b.drainQueue()
 			b.flushNow()
+			close(ack)
 
 		case <-timerC:
 			b.flushNow()
@@ -263,6 +255,20 @@ func (b *Batcher[T]) run() {
 			if b.maxWait > 0 {
 				timer.Reset(b.maxWait)
 			}
+		}
+	}
+}
+
+// drainQueue 非阻塞地把 queue 中所有就绪元素搬到 pending（持锁）。
+func (b *Batcher[T]) drainQueue() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for {
+		select {
+		case item := <-b.queue:
+			b.pending = append(b.pending, item)
+		default:
+			return
 		}
 	}
 }

@@ -11,7 +11,7 @@ cd site
 hugo server    # 本地预览：http://localhost:1313/zeus/
 ```
 
-推送到 `main` 分支后会自动部署到 `https://go-zeus.github.io/zeus/`。
+推送到 `main` 分支后会自动部署到 `https://docs.go-zeus.dev/`。
 
 ## 目录内容
 

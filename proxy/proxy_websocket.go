@@ -61,11 +61,15 @@ func (p *proxy) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// 双向 io.Copy
 	// 任一方向出错或 EOF 即关闭两端，goroutine 退出
+	//
+	// 客户端→后端方向必须从 clientBuf 读取：Hijack 返回的 *bufio.ReadWriter 的
+	// Reader 可能已预读客户端在 Upgrade 握手后立即发送的 WebSocket 首帧（HTTP/1.1
+	// pipelining）。若直接读 clientConn 会跳过 bufio 缓冲，丢失首帧。
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		_, _ = io.Copy(backend, clientConn)
+		_, _ = io.Copy(backend, clientBuf)
 		_ = closeWrite(backend)
 	}()
 	go func() {

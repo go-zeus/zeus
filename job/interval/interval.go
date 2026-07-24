@@ -159,6 +159,14 @@ func (s *intervalScheduler) execute(ctx context.Context, spec job.Spec) {
 		defer cancel()
 	}
 
+	// panic 恢复：单次 Job panic 不应拖垮进程，也不应中断该 Job 后续调度
+	// （落实 "单 Job panic 不影响其他" 设计承诺）
+	defer func() {
+		if r := recover(); r != nil {
+			s.errHandler(spec.Name, fmt.Errorf("interval: job panic recovered: %v", r))
+		}
+	}()
+
 	if err := spec.Handler(execCtx); err != nil {
 		// ctx 被取消属于正常关闭路径，不算错误
 		if errors.Is(err, context.Canceled) {

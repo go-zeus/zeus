@@ -109,9 +109,14 @@ func (e *Error) WithMessage(msg string) *Error {
 	return &out
 }
 
-// GRPCStatus 映射到 gRPC status.Status（与 google.golang.org/grpc/status 兼容）
+// GRPCStatus 返回 *Error 对应的 gRPC code（数字）与 message。
 //
-// gRPC code 映射规则（与 grpc-go 一致）：
+// 注意：本方法签名是 (code int, message string)，并非 grpc-go 自动识别的
+// GRPCStatus() *status.Status，因此 grpc-go transport 不会自动调用它做错误转换。
+// 本包保持零依赖、不引入 grpc-go；业务侧若需 gRPC 集成，应在 transport 层
+// 显式调用本方法并用 status.New(codes.Code(code), message) 构造 *status.Status。
+//
+// gRPC code 映射规则（与 grpc-go codes 一致）：
 //   - HTTP 200 → OK
 //   - HTTP 400 → InvalidArgument
 //   - HTTP 401 → Unauthenticated
@@ -125,9 +130,6 @@ func (e *Error) WithMessage(msg string) *Error {
 //   - HTTP 503 → Unavailable
 //   - HTTP 504 → DeadlineExceeded
 //   - 其他 → Unknown
-//
-// 注：本包不依赖 grpc-go（保持零依赖）。本函数返回纯结构体，
-// 业务侧若需 gRPC 集成，可在 transport 层调用 status.New(code, msg) 转换。
 func (e *Error) GRPCStatus() (code int, message string) {
 	return httpToGRPCCode(e.Code), e.Message
 }
@@ -153,11 +155,16 @@ func New(reason, message string, code int) *Error {
 	}
 }
 
-// Newf 格式化消息创建错误码
+// Newf 格式化消息创建错误码。
+//
+// 参数顺序为 reason、code、format（消息模板）、args：
+// 因 format 是变参，code 无法像 New 那样置于末尾，故前置于 format。
+// 切换 New → Newf 时注意 code 位置不同（New 是第 3 参，Newf 是第 2 参）。
 //
 // 示例：
 //
-//	err := errors.Newf("USER_NOT_FOUND", "user %d not found", 42, 404)
+//	err := errors.Newf("USER_NOT_FOUND", 404, "user %d not found", 42)
+//	err := errors.Newf("INVALID_PARAM", 400, "field %s invalid: %d", "age", -1)
 func Newf(reason string, code int, format string, args ...any) *Error {
 	return &Error{
 		Reason:  reason,

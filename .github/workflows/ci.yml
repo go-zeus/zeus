@@ -83,8 +83,16 @@ jobs:
       - name: Test (main module)
         # -v 输出便于定位失败用例；-timeout 防止单包挂死拖累整个 CI
         run: go test -race -timeout=300s -v -coverprofile=coverage.out ./... 2>&1 | tee test.log
-      - name: Coverage
+      - name: Coverage report
         run: go tool cover -func=coverage.out
+      - name: Coverage gate (≥85%, per CONTRIBUTING)
+        # 落实 CONTRIBUTING.md “新增代码覆盖率 ≥ 85%” 承诺，防止覆盖率静默下滑
+        run: |
+          set -euo pipefail
+          total=$(go tool cover -func=coverage.out | awk '/^total:/ {gsub("%","",$NF); print $NF}')
+          echo "Total coverage: ${total}%"
+          if [ -z "${total:-}" ]; then echo "无法解析总覆盖率"; exit 1; fi
+          awk -v t="$total" -v gate=85 'BEGIN { if (t+0 < gate) { printf "::error::覆盖率 %.1f%% 低于门禁 %d%%\n", t, gate; exit 1 } }'
       - name: Test (plugins)
         run: |
           for mod in $(find plugins -name go.mod -type f); do
