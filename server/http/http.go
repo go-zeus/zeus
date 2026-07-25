@@ -131,6 +131,7 @@ type httpServer struct {
 	tlsCfg         *tls.Config // 显式 TLS 配置（优先）
 	tlsCertFile    string      // TLS 证书文件（与 tlsKeyFile 配对）
 	tlsKeyFile     string      // TLS 私钥文件
+	tlsLoadErr     error       // TLS 证书加载错误（延后到 Start 返回，拒绝静默降级为 HTTP）
 	*http.Server
 }
 
@@ -163,11 +164,13 @@ func NewHTTP(opts ...Option) server.Server {
 		s.Server.TLSConfig = s.tlsCfg
 	} else if s.tlsCertFile != "" && s.tlsKeyFile != "" {
 		cert, err := tls.LoadX509KeyPair(s.tlsCertFile, s.tlsKeyFile)
-		if err == nil {
+		if err != nil {
+			// 拒绝静默降级：记录错误，Start 时 fail-fast 返回。
+			// 否则用户预期 HTTPS（含 mTLS 客户端证书校验）会静默退化为明文 HTTP，造成安全暴露。
+			s.tlsLoadErr = err
+		} else {
 			s.Server.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
 		}
-		// 加载失败不在此处返回 error（保持 Option 链式 API 风格）
-		// 启动时若 TLSConfig 仍为 nil 会回退到 HTTP
 	}
 	return s
 }
@@ -202,6 +205,10 @@ func (s *httpServer) ApplyMiddleware(chain middleware.Chain) {
 }
 
 func (s *httpServer) Start(ctx context.Context) error {
+	// TLS 证书加载失败 fail-fast：拒绝静默降级为明文 HTTP（安全）
+	if s.tlsLoadErr != nil {
+		return fmt.Errorf("http: TLS 证书加载失败，拒绝降级为 HTTP: %w", s.tlsLoadErr)
+	}
 	// 防御二次 Start：包装 mux 和 clusterInjector 只能执行一次，否则会嵌套包装
 	s.startOnce.Do(func() {
 		if s.useDefault {

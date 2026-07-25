@@ -158,6 +158,14 @@ func DoneOrBlock[T any](ctx context.Context, fn func() T) (T, error) {
 
 	resultCh := make(chan T, 1)
 	go func() {
+		// fn panic 不应导致调用方永久阻塞（无 ctx 取消时 select 永等）；
+		// recover 后放入 zero 让 select 能返回。注意：resultCh 缓冲为 1，
+		// 放入 zero 不会阻塞 goroutine，goroutine 可正常退出。
+		defer func() {
+			if r := recover(); r != nil {
+				resultCh <- zero
+			}
+		}()
 		resultCh <- fn()
 	}()
 

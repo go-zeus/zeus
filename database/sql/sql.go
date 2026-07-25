@@ -175,7 +175,6 @@ func (d *db) QueryRow(ctx context.Context, query string, args ...any) database.R
 	row := d.raw.QueryRowContext(spanCtx, query, args...)
 	d.recordMetric("query", time.Since(start), nil)
 	span.End()
-	_ = ctx // ctx 用于 EnsureTxID 注入 baggage，QueryRowContext 用 spanCtx
 	return row
 }
 
@@ -270,7 +269,6 @@ func (t *tx) QueryRow(ctx context.Context, query string, args ...any) database.R
 	row := t.raw.QueryRowContext(spanCtx, query, args...)
 	t.recordMetric("tx_query", time.Since(start), nil)
 	span.End()
-	_ = ctx // ctx 用于注入 tx_id，QueryRowContext 用 spanCtx
 	return row
 }
 

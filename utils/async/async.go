@@ -80,11 +80,12 @@ func Exec[T any](f func() T) Future[T] {
 		}()
 		result = f()
 	}()
+	var zero T // ctx 取消路径用 zero value，避免与后台 goroutine 写 result 竞争（与 ExecCtx 一致）
 	return future[T]{
 		await: func(ctx context.Context) (T, error) {
 			select {
 			case <-ctx.Done():
-				return result, ctx.Err()
+				return zero, ctx.Err()
 			case <-c:
 				return result, err
 			}

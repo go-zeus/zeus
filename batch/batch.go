@@ -26,6 +26,7 @@ package batch
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 )
@@ -41,8 +42,9 @@ const (
 
 // config 内部配置（用户不直接操作）
 type config struct {
-	maxSize int
-	maxWait time.Duration
+	maxSize      int
+	maxWait      time.Duration
+	errorHandler func(any) // handler panic 回调；nil 时用标准库 log 输出
 }
 
 // Option 批处理配置（非泛型，避免类型推断困难）
@@ -69,6 +71,19 @@ func WithMaxWait(d time.Duration) Option {
 	}
 }
 
+// WithErrorHandler 设置 handler panic 时的错误处理回调。
+//
+// 默认（未设置）：handler panic 用标准库 log.Printf 输出到 stderr（不再静默吞掉，
+// 否则整批数据丢失且无任何痕迹，极难排查）。
+// 注入回调可对接告警/指标系统。recover 保证单批次 panic 不会拖垮整个 batcher。
+func WithErrorHandler(h func(any)) Option {
+	return func(c *config) {
+		if h != nil {
+			c.errorHandler = h
+		}
+	}
+}
+
 // Batcher 批处理器
 //
 // 模型：
@@ -80,8 +95,9 @@ func WithMaxWait(d time.Duration) Option {
 type Batcher[T any] struct {
 	handler func([]T)
 
-	maxSize int
-	maxWait time.Duration
+	maxSize      int
+	maxWait      time.Duration
+	errorHandler func(any) // handler panic 回调；nil 时用标准库 log 输出
 
 	queue    chan T
 	flushReq chan chan struct{} // 同步 Flush 协调：Flush 发送 ack chan，run loop flush 后关闭
@@ -89,6 +105,9 @@ type Batcher[T any] struct {
 	stopped  chan struct{}
 
 	wg sync.WaitGroup
+
+	// closeOnce 保证 Close 幂等：并发/重复 Close 不触发 close of closed channel panic
+	closeOnce sync.Once
 
 	// mu/pending 供 Flush 同步使用（外部主动触发时等待后台 worker 完成）
 	mu      sync.Mutex
@@ -109,14 +128,15 @@ func New[T any](handler func([]T), opts ...Option) *Batcher[T] {
 	}
 
 	b := &Batcher[T]{
-		handler:  handler,
-		maxSize:  cfg.maxSize,
-		maxWait:  cfg.maxWait,
-		queue:    make(chan T, 1024),
-		flushReq: make(chan chan struct{}, 1),
-		stopCh:   make(chan struct{}),
-		stopped:  make(chan struct{}),
-		pending:  make([]T, 0, cfg.maxSize),
+		handler:      handler,
+		maxSize:      cfg.maxSize,
+		maxWait:      cfg.maxWait,
+		errorHandler: cfg.errorHandler,
+		queue:        make(chan T, 1024),
+		flushReq:     make(chan chan struct{}, 1),
+		stopCh:       make(chan struct{}),
+		stopped:      make(chan struct{}),
+		pending:      make([]T, 0, cfg.maxSize),
 	}
 
 	b.wg.Add(1)
@@ -198,12 +218,10 @@ func (b *Batcher[T]) Flush() {
 //
 // 调用后 Add 会被丢弃
 func (b *Batcher[T]) Close() {
-	select {
-	case <-b.stopCh:
-		return // 已关闭
-	default:
+	// closeOnce 保证幂等：并发/重复 Close 安全（避免 close of closed channel panic）
+	b.closeOnce.Do(func() {
 		close(b.stopCh)
-	}
+	})
 	b.wg.Wait()
 }
 
@@ -312,13 +330,24 @@ func (b *Batcher[T]) drainAndFlush() {
 	}
 }
 
-// callHandler 安全调用 handler（捕获 panic）
+// callHandler 安全调用 handler（捕获 panic，避免单批次崩溃拖垮整个 batcher）
 func (b *Batcher[T]) callHandler(batch []T) {
 	if len(batch) == 0 {
 		return
 	}
 	defer func() {
-		_ = recover() // 捕获 panic 避免崩溃
+		if r := recover(); r != nil {
+			b.handleError(r)
+		}
 	}()
 	b.handler(batch)
+}
+
+// handleError 处理 handler panic：注入回调优先，否则用标准库 log 输出（不再静默吞掉）
+func (b *Batcher[T]) handleError(r any) {
+	if b.errorHandler != nil {
+		b.errorHandler(r)
+		return
+	}
+	log.Printf("batch: handler panic recovered: %v", r)
 }

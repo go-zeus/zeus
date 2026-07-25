@@ -156,6 +156,13 @@ func (c *client) applyTransportSettings() {
 }
 
 func (c *client) watcher() {
+	// watcher 实现（如 plugins/registry/etcd 等 plugin 内部）panic 不应拖垮整个进程。
+	// 与 mq/job/batch/config 等包的 goroutine 入口 recover 约定一致。
+	defer func() {
+		if r := recover(); r != nil {
+			log.Error("client %s: watcher panic recovered: %v", c.name, r)
+		}
+	}()
 	watcher, ok := c.dis.(registry.Watcher)
 	if !ok {
 		return

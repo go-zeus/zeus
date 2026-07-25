@@ -83,6 +83,12 @@ func (c *Container) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
+	// 并发契约：Start/Stop 假定由单一协调者（如 components.App）顺序调用。
+	// 此处释放锁执行 Provide/OnStart 期间 started 尚未置 true，若并发 Stop 会被
+	// 误判为"未启动"而静默返回、或并发 Start 触发双启动——属已知限制。
+	// 不引入复杂状态机以避免死锁（OnStart 可能阻塞，Stop 等待 starting 需额外协调）。
+	// 按契约使用（Start 完成后再 Stop）则安全；深度改进见后续迭代。
+
 	// 按序调用 Provide（注入用户 context）
 	actx := c.ctx.withContext(ctx)
 	for _, name := range order {

@@ -14,13 +14,44 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sync/atomic"
+	"time"
 )
 
 const uuidLen = 16
 
+// New 生成一个 UUID 字符串。
+//
+// 正常路径用 crypto/rand（GenerateUUID）。极罕见情况下 crypto/rand 失败
+// （如容器化环境 entropy 池耗尽），fallback 到基于时间戳 + 进程内原子计数器的
+// 应急 ID，保证进程内严格唯一（非 RFC 4122 v4，仅用于避免返回空串导致
+// 调用方（如 Instance.ID）大面积 ID 冲突）。
 func New() string {
-	uuid, _ := GenerateUUID()
-	return uuid
+	id, err := GenerateUUID()
+	if err == nil {
+		return id
+	}
+	return fallbackUUID()
+}
+
+// fallbackCounter 进程内单调递增计数器，保证 fallback UUID 在同进程内严格唯一。
+var fallbackCounter uint64
+
+// fallbackUUID 在 crypto/rand 不可用时的应急生成：时间戳（前 8 字节）+ 原子计数器
+// （后 8 字节）混合。计数器单调递增保证进程内唯一；跨进程靠时间戳近似区分。
+func fallbackUUID() string {
+	var buf [uuidLen]byte
+	ns := uint64(time.Now().UnixNano())
+	seq := atomic.AddUint64(&fallbackCounter, 1)
+	for i := 0; i < 8; i++ {
+		buf[i] = byte(ns >> (i * 8))
+	}
+	for i := 0; i < 8; i++ {
+		buf[8+i] = byte(seq >> (i * 8))
+	}
+	applyV4Markers(buf[:])
+	id, _ := FormatUUID(buf[:])
+	return id
 }
 
 // GenerateRandomBytes is used to generate random bytes of given size.

@@ -6,6 +6,21 @@
 
 ## [Unreleased]
 
+### Fixed — 深度审计：并发安全 / 资源管理 / 错误处理加固
+
+- **`batch`**：`Close` 用 `sync.Once` 保证幂等，修并发/重复 Close 的 double-close panic；`callHandler` 的 handler panic 不再静默吞掉（默认标准库 log 输出 + 新增 `WithErrorHandler` Option 对接告警）
+- **`utils/async`**：`Exec` 的 ctx 取消分支返回 zero value，修与后台 goroutine 写 `result` 的 data race（与 `ExecCtx` 已修范式对齐）
+- **`registry/memory`**：`Close` 实现 `io.Closer`（返回 error），使 `components.RegistryComponent.OnStop` 能通过类型断言自动关闭默认 memory registry（原签名不匹配导致 watcher channel 不被关闭，下游阻塞监听者无法感知退出）
+- **`mq/memory`**：`Close` 加 10s 默认超时，避免不响应 ctx 的 handler 导致 `Close` 永久阻塞、应用无法优雅关闭（SIGKILL 后丢失 in-flight 消息）
+- **`types.ServiceEntry`**：`Reload` 跳过重复 ID，修 `Instances` 覆盖写入但 `Cluster.AddInstance` 拒绝导致的两个索引不一致（路由层与状态层行为分裂）
+- **`config`**：`Watch` 的 watcher goroutine 加 panic recover（对齐全包 goroutine 入口约定，防 plugin 实现 panic 拖垮进程）
+- **`utils/ctxutil`**：`DoneOrBlock` 的 goroutine 加 recover，避免 fn panic 时调用方永久阻塞（无 ctx 取消场景下 select 永等）
+- **`client`**：`watcher` goroutine 加 recover（防 plugin registry 实现 panic 拖垮进程）
+- **`server/http`**（安全）：`TLSFiles` 证书加载失败改为 fail-fast（`Start` 返回 error），拒绝静默降级为明文 HTTP（原行为造成 HTTPS/mTLS 预期实际暴露为 HTTP）
+- **`utils/uuid`**：`New` 在 `crypto/rand` 失败时 fallback 到时间戳+原子计数器 ID（避免返回空串导致 `Instance.ID` 大面积冲突）
+- **`middleware/requestid`**：`generateID` 在 `crypto/rand` 失败时 fallback（避免全零 ID 导致 trace 关联失效）
+- **`database/sql`**：删除 `QueryRow`/`tx.QueryRow` 中多余的 `_ = ctx` 死代码（ctx 已用于 `startSpan`，baggage 经 spanCtx 正确传递）
+
 ### Changed (Breaking) — utils 工具包重设计 + 运行时加固
 
 - **`utils/time` → `utils/timex`**：包重命名并收敛 API。新增布局常量（`DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly`）+ 可变参数默认布局的 `Format`/`Parse` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek` 等）。import 路径与包名同步变更

@@ -11,6 +11,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"strconv"
+	"time"
 
 	"github.com/go-zeus/zeus/middleware"
 )
@@ -72,9 +74,11 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 }
 
 // generateID 生成 16 字节 hex 编码的随机 ID（32 字符）
-// 用 crypto/rand 避免 uuid 包依赖
+// 用 crypto/rand 避免 uuid 包依赖；失败时 fallback 到纳秒时间戳（避免全 0 导致 trace 关联失效）
 func generateID() string {
 	var buf [16]byte
-	_, _ = rand.Read(buf[:])
+	if _, err := rand.Read(buf[:]); err != nil {
+		return strconv.FormatInt(time.Now().UnixNano(), 16)
+	}
 	return hex.EncodeToString(buf[:])
 }

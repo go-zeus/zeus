@@ -25,11 +25,17 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/go-zeus/zeus/log"
 	"github.com/go-zeus/zeus/mq"
 	"github.com/go-zeus/zeus/propagation"
 )
+
+// defaultCloseTimeout broker.Close 等待 handler 退出的默认超时。
+// 订阅 ctx 已取消，响应 ctx 的 handler 会及时退出；对不响应 ctx 的 handler 设此超时，
+// 避免 Close 永久阻塞导致应用无法优雅关闭（SIGKILL 后丢失 in-flight 消息）。
+const defaultCloseTimeout = 10 * time.Second
 
 // broker 内存消息代理
 type broker struct {
@@ -239,7 +245,16 @@ func (b *broker) Close() error {
 	}
 	b.mu.Unlock()
 
-	// 等待所有 handler 退出（无超时：in-flight handler 应自行通过 ctx 控制）
-	b.wg.Wait()
+	// 等待所有 handler 退出。订阅 ctx 已取消，响应 ctx 的 handler 会及时退出；
+	// 对不响应 ctx 的 handler 设默认超时，避免 Close 永久阻塞导致应用无法优雅关闭。
+	done := make(chan struct{})
+	go func() {
+		b.wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(defaultCloseTimeout):
+	}
 	return nil
 }
