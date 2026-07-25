@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 // Selector 后端选择器
@@ -77,11 +78,30 @@ func WithTransport(t http.RoundTripper) Option {
 	return func(p *proxy) { p.transport = t }
 }
 
+// defaultProxyTransport 反向代理友好的默认 Transport。
+//
+// http.DefaultTransport 的 MaxIdleConnsPerHost=2 对反向代理是性能陷阱：
+// 高并发下每后端仅 2 个空闲连接，超出即新建 TCP/TLS 连接（握手 ~1-10ms），
+// 单个慢请求/SSE/WebSocket 长连接占满池位后，后续短请求全部被迫建连。
+// 此处放宽连接池；用户仍可经 WithTransport 覆盖。
+var defaultProxyTransport = func() *http.Transport {
+	t, ok := http.DefaultTransport.(*http.Transport)
+	if !ok || t == nil {
+		t = &http.Transport{}
+	} else {
+		t = t.Clone()
+	}
+	t.MaxIdleConnsPerHost = 256
+	t.MaxIdleConns = 1024
+	t.IdleConnTimeout = 90 * time.Second
+	return t
+}()
+
 // New 创建反向代理
 // 必须提供 WithSelector，否则 panic（编程错误）
 func New(opts ...Option) Proxy {
 	p := &proxy{
-		transport:    http.DefaultTransport,
+		transport:    defaultProxyTransport,
 		errorHandler: defaultErrorHandler,
 	}
 	for _, opt := range opts {

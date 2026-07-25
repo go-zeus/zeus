@@ -35,11 +35,21 @@ func (cb *CircuitBreaker) MarkFailed()  { cb.breaker.MarkFailed() }
 func (cb *CircuitBreaker) State() State { return cb.breaker.State() }
 
 // Execute 执行函数，自动标记成功/失败
-func (cb *CircuitBreaker) Execute(fn func() error) error {
-	if err := cb.Allow(); err != nil {
-		return err
+//
+// fn panic 时：Allow 已消耗一个半开探测名额，必须调用 MarkFailed 回退状态，
+// 否则半开计数卡死、后续请求被拒直至超时重置。恢复状态后重新抛出 panic，
+// 不掩盖业务 bug。
+func (cb *CircuitBreaker) Execute(fn func() error) (err error) {
+	if e := cb.Allow(); e != nil {
+		return e
 	}
-	err := fn()
+	defer func() {
+		if r := recover(); r != nil {
+			cb.MarkFailed()
+			panic(r)
+		}
+	}()
+	err = fn()
 	if err != nil {
 		cb.MarkFailed()
 		return err

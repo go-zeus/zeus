@@ -107,6 +107,15 @@ func (m *memory) notifyWatchers() {
 
 func (m *memory) GetService(_ context.Context, serviceName string) (*types.ServiceEntry, error) {
 	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.services[serviceName], nil
+	srv, ok := m.services[serviceName]
+	m.mu.RUnlock()
+	if !ok {
+		// 未注册视为不存在，与原行为一致返回 (nil, nil)
+		return nil, nil
+	}
+	// 返回快照：隔离调用方与注册中心内部状态。
+	// 调用方（proxy/client）在无锁下 range Clusters/Instances map，
+	// 若直接返回内部指针，会与并发的 AddInstance/DelInstance 产生
+	// "concurrent map iteration and map write" panic（服务动态上下线时触发）。
+	return srv.Snapshot(), nil
 }

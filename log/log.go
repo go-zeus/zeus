@@ -66,8 +66,21 @@ func (l *Logger) Error(msg string, args ...any) {
 }
 
 // Fatal 输出 FATAL 级日志后调用 os.Exit(1)（与 slog.Fatal 行为一致）。
+// 采用 fmt.Sprint 拼接（非格式化），与标准库 log.Fatal 语义对齐；需要格式化用 Fatalf。
+// 退出前 best-effort 调用 Writer.Close 触发异步/缓冲 writer（如 file_rotate）的 flush，
+// 避免 FATAL 日志停留在缓冲区随 os.Exit 丢失。
 func (l *Logger) Fatal(v ...any) {
 	l.Log(context.Background(), LevelFatal, fmt.Sprint(v...))
+	_ = l.writer.Close()
+	os.Exit(1)
+}
+
+// Fatalf 输出格式化的 FATAL 级日志后调用 os.Exit(1)。
+// msg 支持 fmt.Sprintf 占位符，与 Debug/Info/Warn/Error 的格式化语义一致
+// （修复 Fatal 与其它级别格式化行为不一致的问题）。
+func (l *Logger) Fatalf(msg string, args ...any) {
+	l.Log(context.Background(), LevelFatal, fmt.Sprintf(msg, args...))
+	_ = l.writer.Close()
 	os.Exit(1)
 }
 
@@ -156,6 +169,9 @@ func Error(msg string, args ...any) { defaultLogger.Load().Error(msg, args...) }
 
 // Fatal 包级快捷函数：输出日志后调用 os.Exit(1)（与 slog.Fatal 一致）。
 func Fatal(v ...any) { defaultLogger.Load().Fatal(v...) }
+
+// Fatalf 包级快捷函数：输出格式化日志后调用 os.Exit(1)。
+func Fatalf(msg string, args ...any) { defaultLogger.Load().Fatalf(msg, args...) }
 
 // stdWriter 内置标准输出写入器（零依赖兜底）
 type stdWriter struct{}

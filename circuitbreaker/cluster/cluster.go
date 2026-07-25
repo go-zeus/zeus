@@ -76,6 +76,15 @@ func (c *ClusterBreaker) Keys() []string {
 	return keys
 }
 
+// RemoveKey 移除指定 key 的熔断器。
+// 用于动态 cluster（临时灰度/单元化）下线后回收，避免 breakers map 无限增长导致内存泄漏。
+// key 不存在时为 no-op。
+func (c *ClusterBreaker) RemoveKey(key string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.breakers, key)
+}
+
 // breaker 获取或创建指定 key 的熔断器
 // 热路径：先 RLock 快速命中，未命中再升级 Lock 创建（双检锁）
 func (c *ClusterBreaker) breaker(key string) *circuitbreaker.CircuitBreaker {

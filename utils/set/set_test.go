@@ -8,13 +8,13 @@ import (
 
 // —— 辅助：忽略顺序的切片相等 ——
 
-func sortedInts(s Set[int]) []int {
+func sortedInts(s *Set[int]) []int {
 	out := s.Values()
 	sort.Ints(out)
 	return out
 }
 
-func sortedStrings(s Set[string]) []string {
+func sortedStrings(s *Set[string]) []string {
 	out := s.Values()
 	sort.Strings(out)
 	return out
@@ -165,6 +165,39 @@ func TestClone(t *testing.T) {
 	c.Add(99)
 	if s.Contains(99) {
 		t.Error("Modifying clone affected original")
+	}
+}
+
+// —— 指针语义回归：s2 := s1 共享同一底层集合（引用语义）——
+//
+// 这是对旧"值接收者 + 可变 map"footgun 的回归保护：
+// 旧实现中 s2 := s1 后 s2.Add(x) 也会修改 s1（因为 map 是引用），
+// 但语义上令人困惑；现统一为显式指针语义，并要求独立副本必须用 Clone()。
+func TestPointerSemantics_AssignmentSharesUnderlying(t *testing.T) {
+	s1 := FromSlice([]int{1, 2, 3})
+	s2 := s1 // 指针赋值，共享同一集合
+	s2.Add(99)
+
+	if !s1.Contains(99) {
+		t.Error("指针语义下 s2 := s1 应共享底层集合，s2.Add(99) 应在 s1 可见")
+	}
+	if s1 != s2 {
+		t.Error("s2 := s1 后 s1 与 s2 应为同一指针")
+	}
+}
+
+// Clone 必须产生完全独立的副本（深拷贝底层 map）
+func TestClone_IsIndependent(t *testing.T) {
+	s1 := FromSlice([]int{1, 2, 3})
+	s2 := s1.Clone()
+	s2.Add(99)
+	s2.Remove(1)
+
+	if s1.Contains(99) {
+		t.Error("Clone 副本的 Add 不应影响原集合")
+	}
+	if !s1.Contains(1) {
+		t.Error("Clone 副本的 Remove 不应影响原集合")
 	}
 }
 

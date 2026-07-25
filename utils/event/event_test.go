@@ -12,77 +12,129 @@ func TestEvent_Subscribe(t *testing.T) {
 	e.Trigger()
 	select {
 	case <-ch:
-		// 成功收到事件
 	case <-time.After(time.Second):
 		t.Error("Watch() 后 Trigger，应在1秒内收到事件")
 	}
 }
 
-// TestEvent_Unsubscribe 验证未 Watch 时 Trigger 不会阻塞，且不影响后续 Watch
-func TestEvent_Unsubscribe(t *testing.T) {
-	e := NewEvent()
-	// 先触发，没有人 Watch
-	e.Trigger()
-	// 之后 Watch 应该能收到最新的事件（Trigger 会先清空旧事件再写入）
-	ch := e.Watch()
-	e.Trigger()
-	select {
-	case <-ch:
-		// 成功收到事件
-	case <-time.After(time.Second):
-		t.Error("Trigger 后 Watch 应能收到事件")
-	}
-}
-
-// TestEvent_Emit 验证 Trigger 后 Watch 通道可接收通知
-func TestEvent_Emit(t *testing.T) {
-	e := NewEvent()
-	ch := e.Watch()
-	e.Trigger()
-	select {
-	case <-ch:
-		// 成功收到事件
-	case <-time.After(time.Second):
-		t.Error("Trigger 后应能通过 Watch 收到通知")
-	}
-}
-
-// TestEvent_MultipleSubscribers 验证多个 Watch 各自独立通道，均能收到事件
-// 修复后的 fan-out 语义：每个 watcher 拥有独立 channel，Trigger 时所有 watcher 都收到
+// TestEvent_MultipleSubscribers 多 watcher 各自独立通道均能收到
 func TestEvent_MultipleSubscribers(t *testing.T) {
 	e := NewEvent()
-	ch1 := e.Watch()
-	ch2 := e.Watch()
-	// 每个 Watch 返回独立 channel
+	ch1, ch2 := e.Watch(), e.Watch()
 	if ch1 == ch2 {
-		t.Error("多次 Watch 应返回独立通道，避免订阅者之间抢事件")
+		t.Error("多次 Watch 应返回独立通道")
 	}
 	e.Trigger()
-	// 两个订阅者都应能收到事件（fan-out）
 	for i, ch := range []<-chan struct{}{ch1, ch2} {
 		select {
 		case <-ch:
-			// 订阅者成功收到
 		case <-time.After(time.Second):
-			t.Errorf("订阅者 %d 未能在1秒内收到事件", i+1)
+			t.Errorf("订阅者 %d 未收到事件", i+1)
 		}
 	}
 }
 
-// TestEvent_Close_ReleasesWatchers 验证 Close 关闭所有 watcher channel
+// 默认策略 keepLatest：连触多次合并为最新一次
+func TestEvent_KeepLatest(t *testing.T) {
+	e := NewEvent()
+	ch := e.Watch()
+	e.Trigger()
+	e.Trigger()
+	e.Trigger()
+	select {
+	case <-ch:
+	default:
+		t.Error("keepLatest: watcher 应至少收到一次")
+	}
+	// 3 次触发合并为 1 个待消费事件，再读应阻塞
+	select {
+	case <-ch:
+		t.Error("keepLatest: 3 次触发应合并为 1 个待消费事件")
+	default:
+	}
+}
+
+// keepOldest 策略：连触多次只保留首个
+func TestEvent_KeepOldest(t *testing.T) {
+	e := NewEvent(WithKeepOldest())
+	ch := e.Watch()
+	e.Trigger()
+	e.Trigger()
+	e.Trigger()
+	select {
+	case <-ch:
+	default:
+		t.Error("keepOldest: watcher 应收到首个事件")
+	}
+	select {
+	case <-ch:
+		t.Error("keepOldest: 后续触发应被丢弃")
+	default:
+	}
+}
+
 func TestEvent_Close_ReleasesWatchers(t *testing.T) {
 	e := NewEvent()
-	ch1 := e.Watch()
-	ch2 := e.Watch()
+	ch1, ch2 := e.Watch(), e.Watch()
 	e.Close()
 	for i, ch := range []<-chan struct{}{ch1, ch2} {
 		select {
 		case <-ch:
-			// Close 后 channel 应被关闭，接收方收到零值
 		default:
 			t.Errorf("订阅者 %d 的 channel 应被 Close 关闭", i+1)
 		}
 	}
-	// Trigger 在 Close 后是 no-op
-	e.Trigger() // 不应 panic
+	e.Trigger() // Close 后 Trigger 不 panic
+	// Close 后 Watch 返回已关闭 channel
+	ch3 := e.Watch()
+	if _, ok := <-ch3; ok {
+		t.Error("Close 后 Watch 应返回已关闭 channel")
+	}
+}
+
+// Latch：仅首次 Trigger 生效，Done 关闭，HasFired 正确
+func TestLatch(t *testing.T) {
+	l := NewLatch()
+	if l.HasFired() {
+		t.Error("新建 Latch 不应已触发")
+	}
+	if !l.Trigger() {
+		t.Error("首次 Trigger 应返回 true")
+	}
+	if !l.HasFired() {
+		t.Error("触发后 HasFired 应为 true")
+	}
+	if l.Trigger() {
+		t.Error("二次 Trigger 应返回 false")
+	}
+	select {
+	case _, ok := <-l.Done():
+		if ok {
+			t.Error("Done 应已关闭")
+		}
+	default:
+		t.Error("Done 应可读（已关闭）")
+	}
+}
+
+// 多个等待方观察同一个 Latch
+func TestLatch_MultipleWaiters(t *testing.T) {
+	l := NewLatch()
+	d1, d2 := l.Done(), l.Done()
+	l.Trigger()
+	for i, d := range []<-chan struct{}{d1, d2} {
+		if _, ok := <-d; ok {
+			t.Errorf("等待方 %d 的 Done 未关闭", i)
+		}
+	}
+}
+
+// deprecated 别名向后兼容
+func TestDeprecatedAliases(t *testing.T) {
+	if _, ok := any(NewOneEvent()).(*eventImpl); !ok {
+		t.Error("NewOneEvent 别名应返回 eventImpl")
+	}
+	if !NewOnceEvent().Trigger() {
+		t.Error("NewOnceEvent 别名 Trigger 应生效")
+	}
 }

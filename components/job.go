@@ -1,8 +1,6 @@
 package components
 
 import (
-	"context"
-
 	"github.com/go-zeus/zeus/job"
 	"github.com/go-zeus/zeus/log"
 )
@@ -106,8 +104,6 @@ func (j *JobRegistration) Provide(_ Context) (any, error) {
 func (j *JobRegistration) Lifecycle() Lifecycle {
 	return Lifecycle{
 		OnStart: func(_ Context) error {
-			// 兼容 ctx 作为 context.Context 的隐式断言（用于编译期检查）
-			_ = context.Background()
 			return nil
 		},
 	}

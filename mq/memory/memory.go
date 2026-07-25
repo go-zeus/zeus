@@ -117,10 +117,16 @@ func (b *broker) Publish(ctx context.Context, topic string, msg *mq.Message) err
 	// fan-out：同步投递给每个订阅者的 channel
 	// 注意：ch 是无缓冲 channel，发送会阻塞直到 handler goroutine 取走
 	// 这是"慢消费者反压发布者"的设计选择
+	// 约束：handler 内严禁同步 Publish 同一 topic（会自死锁：handler 占用 runHandler
+	// 不读 ch，向同一 sub.ch 发送无接收者）。如需此能力请走 kafka/nats 插件。
 	for _, sub := range subs {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case <-sub.done:
+			// 订阅者已退出（ctx 取消或 broker Close），跳过，
+			// 避免向无接收者的 channel 发送而永久阻塞（修复 Close/Cancel 死锁）
+			continue
 		case sub.ch <- msg:
 		}
 	}
@@ -167,6 +173,10 @@ func (b *broker) Subscribe(ctx context.Context, topic string, handler mq.Handler
 func (b *broker) runHandler(ctx context.Context, sub *subscription) {
 	defer b.wg.Done()
 	defer close(sub.done)
+	// 退出时从订阅表移除自身，避免成为"幽灵订阅者"：
+	// 否则 Subscribe 的调用方 ctx 取消后，sub 残留在 b.subscribers，
+	// 后续 Publish 仍会复制到该 sub 并向无接收者的 channel 发送，永久阻塞
+	defer b.removeSubscription(sub)
 
 	for {
 		select {
@@ -175,9 +185,34 @@ func (b *broker) runHandler(ctx context.Context, sub *subscription) {
 		case msg := <-sub.ch:
 			// 自动 extract baggage 到 ctx（与 propagation 集成）
 			handlerCtx := propagation.ExtractMetadata(ctx, msg.Headers)
-			if err := sub.handler(handlerCtx, msg); err != nil {
+			// panic 恢复：单订阅者 handler panic 不应拖垮进程
+			// （落实 "fan-out 隔离故障" 设计承诺）
+			if err := b.safeHandle(handlerCtx, sub, msg); err != nil {
 				b.errHandler(sub.topic, msg, err)
 			}
+		}
+	}
+}
+
+// safeHandle 调用用户 handler 并捕获 panic，转为 error 经 ErrorHandler 处理
+func (b *broker) safeHandle(ctx context.Context, sub *subscription, msg *mq.Message) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("mq.memory: handler panic recovered: %v", r)
+		}
+	}()
+	return sub.handler(ctx, msg)
+}
+
+// removeSubscription 从订阅表中移除指定订阅（runHandler 退出时调用）
+func (b *broker) removeSubscription(sub *subscription) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	subs := b.subscribers[sub.topic]
+	for i, s := range subs {
+		if s == sub {
+			b.subscribers[sub.topic] = append(subs[:i], subs[i+1:]...)
+			break
 		}
 	}
 }

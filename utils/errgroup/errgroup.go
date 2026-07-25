@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Vendored from golang.org/x/sync/errgroup（零依赖原则下不引入 x/sync 依赖）。
+// 上游版本：v0.x（跟踪 https://github.com/golang/sync 同步 bugfix）。
+// 如需 SetLimit 等更新能力，可直接替换为 golang.org/x/sync/errgroup。
+
 // Package errgroup provides synchronization, error propagation, and Context
 // cancelation for groups of goroutines working on subtasks of a common task.
 package errgroup

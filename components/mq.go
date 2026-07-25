@@ -1,7 +1,6 @@
 package components
 
 import (
-	"context"
 	"strconv"
 	"sync/atomic"
 
@@ -117,7 +116,6 @@ func (s *MQSubscription) Provide(_ Context) (any, error) {
 func (s *MQSubscription) Lifecycle() Lifecycle {
 	return Lifecycle{
 		OnStart: func(_ Context) error {
-			_ = context.Background()
 			return nil
 		},
 	}

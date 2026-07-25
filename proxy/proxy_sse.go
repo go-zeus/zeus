@@ -27,6 +27,9 @@ func (p *proxy) handleSSE(w http.ResponseWriter, r *http.Request) {
 	upReq.URL.Scheme = target.Scheme
 	upReq.URL.Host = target.Host
 	upReq.RequestURI = ""
+	// 与 HTTP 路径一致注入 X-Forwarded-For / X-Real-IP / X-Request-ID，
+	// 避免后端 SSE handler 看到的 RemoteAddr 是 proxy、XFF 链断裂、日志无法关联
+	p.injectForwardHeaders(target, upReq)
 
 	resp, err := p.transport.RoundTrip(upReq)
 	if err != nil {
@@ -78,9 +81,26 @@ func (p *proxy) handleSSE(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// copyHeaders 浅拷贝 HTTP 头
+// hopHeaders 端到端不得转发的逐跳头（RFC 7230 §6.1）。
+// 逐跳头由相邻一跳消费，端到端转发会破坏语义（如 backend 已 chunked 解码，
+// 再转发 Transfer-Encoding 会让客户端误解）。
+var hopHeaders = map[string]struct{}{
+	"Connection":          {},
+	"Keep-Alive":          {},
+	"Proxy-Authenticate":  {},
+	"Proxy-Authorization": {},
+	"Te":                  {},
+	"Trailer":             {},
+	"Transfer-Encoding":   {},
+	"Upgrade":             {},
+}
+
+// copyHeaders 浅拷贝 HTTP 头，跳过逐跳头（hop-by-hop）
 func copyHeaders(dst, src http.Header) {
 	for k, vs := range src {
+		if _, hop := hopHeaders[k]; hop {
+			continue
+		}
 		for _, v := range vs {
 			dst.Add(k, v)
 		}

@@ -34,6 +34,21 @@ func IP(ip string) Option {
 	}
 }
 
+// ReadHeaderTimeout 设置读取请求头的最大时长。
+//
+// 默认 10s，用于防御 Slowloris 慢速攻击（攻击者缓慢发送 header 占满连接池）。
+// 该超时只约束 header 读取阶段，不影响 body/SSE/WebSocket 长连接。
+func ReadHeaderTimeout(d time.Duration) Option {
+	return func(s *httpServer) { s.ReadHeaderTimeout = d }
+}
+
+// IdleTimeout 设置 keep-alive 空闲连接的最大存活时长，默认 120s。
+//
+// 避免空闲连接无限期占用资源。WebSocket/SSE 等活动长连接不受此限制。
+func IdleTimeout(d time.Duration) Option {
+	return func(s *httpServer) { s.IdleTimeout = d }
+}
+
 func Mux(h http.Handler) Option {
 	return func(s *httpServer) {
 		s.Handler = h
@@ -125,7 +140,12 @@ var _ server.Server = (*httpServer)(nil)
 // NewHTTP 创建 HTTP 服务器
 func NewHTTP(opts ...Option) server.Server {
 	s := &httpServer{
-		Server:         &http.Server{},
+		Server: &http.Server{
+			// 默认安全超时：防 Slowloris（ReadHeaderTimeout）+ 防空闲连接泄漏（IdleTimeout）。
+			// 仅约束 header 读取与空闲态，不影响 body/SSE/WebSocket 长连接。
+			ReadHeaderTimeout: 10 * time.Second,
+			IdleTimeout:       120 * time.Second,
+		},
 		autoClustering: true, // 默认启用集群路由自动注入
 	}
 	for _, opt := range opts {

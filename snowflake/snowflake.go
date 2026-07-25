@@ -34,9 +34,6 @@ import (
 // —— 常量 ——
 
 const (
-	// 总位数
-	totalBits = 63 // 1 位符号位保留
-
 	// 各部分位数
 	machineIDBits = 10
 	sequenceBits  = 12
@@ -140,6 +137,13 @@ func (n *Node) Next() (int64, error) {
 			// 等待追上
 			time.Sleep(diff)
 			now = time.Now().UnixMilli() - n.epoch
+			// sleep 期间时钟可能再次回拨（NTP 校时、容器时钟漂移），
+			// 需重新校验：若仍落后于已记录时间戳，直接拒绝生成，
+			// 避免 n.timestamp 被回退后与历史 (timestamp, machineID, sequence) 组合重复
+			if now < n.timestamp {
+				return 0, fmt.Errorf("%w: still backward %s after sleep",
+					ErrClockMovedBackwards, time.Duration(n.timestamp-now)*time.Millisecond)
+			}
 		} else {
 			return 0, fmt.Errorf("%w: backward %s", ErrClockMovedBackwards, diff)
 		}
@@ -206,6 +210,3 @@ func ParseSequence(id int64) int64 {
 var ErrClockMovedBackwards = errors.New("snowflake: clock moved backwards")
 
 // —— 内部辅助 ——
-
-// compile-time check
-var _ = totalBits

@@ -6,6 +6,43 @@
 
 ## [Unreleased]
 
+### Changed (Breaking) — utils 工具包重设计 + 运行时加固
+
+- **`utils/time` → `utils/timex`**：包重命名并收敛 API。新增布局常量（`DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly`）+ 可变参数默认布局的 `Format`/`Parse` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek` 等）。import 路径与包名同步变更
+- **`utils/set`**：统一为指针接收者。构造函数 `New`/`NewWithCapacity`/`FromSlice` 返回 `*Set[T]`，`SortedValues` 签名改为接收 `*Set[T]`。修复「值接收者 + 可变 map」导致 `s2 := s1; s2.Add(x)` 隐式修改 `s1` 的 footgun；现 `s2 := s1` 为显式共享语义，独立副本须用 `Clone()`
+- **`utils/event`**：`OneEvent`/`OnceEvent` 标记 Deprecated（别名保留）。`Event` 合并原 `OneEvent` 语义（支持多次触发，默认 `keepLatest` 合并）；新增 `Latch` 取代 `OnceEvent`
+
+**迁移方法**：
+- `utils/time` → 搜索替换 import 路径为 `utils/timex`，包名 `time` → `timex`
+- `set` → 调用点改指针语义（编译器会逐处报错引导，零静默破坏）
+- `event` → `OneEvent` 用 `Event` 代替、`OnceEvent` 用 `Latch` 代替（旧名仍可用，见下 Deprecated）
+
+### Deprecated
+
+- **`event.OneEvent` / `event.NewOneEvent`**：用 `Event` / `NewEvent` 代替
+- **`event.OnceEvent` / `event.NewOnceEvent`**：用 `Latch` / `NewLatch` 代替
+- 保留周期见 [api-stability.md](./api-stability.md) 的 Deprecation Policy（v1.0.0 前不删除）
+
+### Added — utils 工具包增强
+
+- **`event.Latch` / `NewLatch`**：一次性事件（`Trigger() bool` / `Done() <-chan struct{}` / `HasFired() bool`），供多等待方观察同一完成信号
+- **`event.WithKeepOldest()`**：`Event` 合并策略选项（连触多次只保留首个，默认 `keepLatest`）
+- **`random.FastRange` / `FastInt` / `FastString`**：基于 `math/rand/v2` 的快速伪随机路径（~5ns，非密码学安全），与 `crypto/rand` 安全路径双轨
+- **`log.Fatalf` / `Logger.Fatalf`**：`Fatal` 的格式化版本
+- **`banner`**：TTY 门控（非终端不输出）+ `ZEUS_NO_BANNER` 环境变量 + ldflags 版本注入
+- **`set`**：完整集合代数（指针语义）`Clone` / `Union` / `Intersect` / `Difference` / `SymmetricDifference` / `IsSubset` / `IsSuperset` / `IsDisjoint` / `Equal`
+- **cluster 治理**（`circuitbreaker/cluster` / `ratelimit/cluster` / `retry/cluster`）：`RemoveKey` / `Delete`，防动态 cluster key 内存泄漏
+
+### Fixed — 运行时核心 Bug 修复
+
+- **`snowflake`**：时钟回拨睡眠后未重新校验，导致生成重复 ID（睡眠后补重检守卫）
+- **`registry/memory`**：`GetService` 返回内部指针，并发 map 迭代/写入 panic；改为返回 `ServiceEntry.Snapshot()` 快照
+- **`mq/memory`**：`Close` 死锁、幽灵订阅者、handler panic 拖垮整个 broker（延迟恢复 + 退出清理 + done 分支）
+- **`proxy`**：默认 transport 改用连接池（替换 `http.DefaultTransport`）；SSE 注入转发头并过滤逐跳头（RFC 7230 §6.1）；WebSocket 修复丢帧（用 `clientBuf` 而非 `clientConn`）
+- **`server/http`**：默认 `ReadHeaderTimeout=10s` / `IdleTimeout=120s`（Slowloris 防御）
+- **`cache/memory`**：`Get` 用 `CompareAndDelete` 防 ABA
+- **`circuitbreaker`**：`Execute` panic 时正确 `MarkFailed` 再 re-panic（避免状态不一致）
+
 ### Changed (Breaking) — 命名规范对齐 Go 官方风格
 
 以下变更属于 Go 命名规范对齐（参考 Effective Go + CodeReviewComments）：

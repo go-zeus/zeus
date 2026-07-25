@@ -169,7 +169,7 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | 功能域 | 接口名 | 用户 API | 内置实现 | plugins 实现 |
 |--------|--------|----------|----------|-------------|
 | registry | `Registrar`/`Discovery`/`Watcher` | 纯接口 | `registry/memory` | `plugins/registry/etcd` |
-| balancer | `Balancer` | 纯接口 | `balancer/random,round_robin` | — |
+| balancer | `Balancer` | 纯接口 | `balancer/random,roundrobin` | — |
 | server | `Server` | 纯接口 | `server/http`（含健康检查 + 自动集群路由注入） | `plugins/server/grpc`（含自动集群路由注入） |
 | ~~service~~ | — | **已删除**（职责与 app/components 重叠） | — | — |
 | log | `Writer` | `Logger` 结构体（With/Close） | `log/slog`（cluster Field 自动注入在公共 `Logger` 层，非 slog 专属） | `plugins/log/zap`、`plugins/log/file_rotate` |
@@ -203,6 +203,11 @@ CI：`.github/workflows/ci.yml` — lint + test + coverage，Go 1.22（主仓）
 | errors | `errors.New(reason, message, code)` / `Newf` / `FromError(err)` | Kratos 风格业务错误码：reason+message+code+metadata，HTTP/gRPC 双协议自动映射，兼容标准 `errors.Is/As` |
 | metadata | `metadata.MD`（`map[string]string`） + `metadata.NewContext`/`FromContext`/`Get`/`Set`/`Delete`/`MergeContext`/`Copy`/`Equal` | 请求级 K-V 元数据（context 传递，单 context 无锁）；与 propagation 的区别：metadata 是进程内 context 值，不跨进程透传 |
 | safe | `safe.GO(func() error)` | 带 panic 恢复的 goroutine 启动器（避免单 goroutine panic 拖垮进程） |
+| timex | `timex.Now()` / `NowUnix()` / `Format(t, layout...)` / `Parse(s, layout...)` + 布局常量 `DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek`） | 时间工具：布局常量 + 可变参数默认布局，替代冗长的 `time.Format`（原 `utils/time` 已重命名） |
+| event | `event.NewEvent()` → `Watch()/Trigger()/Close()`（多次触发，多 watcher 独立通道）；`event.NewLatch()` → `Trigger()/Done()/HasFired()` | 事件通知：Event 多次触发（可选 `WithKeepOldest` 合并策略），Latch 一次性事件（多等待方共享完成信号） |
+| set | `set.FromSlice(s)` / `New[T]()` → `*Set[T].Add/Remove/Contains/Union/Intersect/Difference/Clone/Equal` | 泛型集合：基于 map 的集合代数，**指针接收者引用语义**（`s2:=s1` 共享，独立副本用 `Clone()`） |
+| random | `random.RangeRand(min,max)` / `Int63()` / `Bytes(n)`（crypto 安全）；`FastRange`/`FastInt`/`FastString`（math/rand/v2 快速） | 随机数双轨：安全路径（令牌/密钥）+ 快速路径（jitter/测试数据），按安全需求显式选择 |
+| banner | `import _ ".../utils/banner"` | 框架启动 logo：TTY 门控（非终端不输出）+ `ZEUS_NO_BANNER` 环境变量关闭 + ldflags 版本注入 |
 
 ### 构造与使用
 
@@ -510,7 +515,7 @@ import (
     "net/http"
     "net/url"
     "github.com/go-zeus/zeus/proxy"
-    "github.com/go-zeus/zeus/balancer/round_robin"
+    "github.com/go-zeus/zeus/balancer/roundrobin"
 )
 
 // 静态模式
@@ -520,7 +525,7 @@ http.ListenAndServe(":8081", p)
 
 // 动态模式（服务发现 + 集群路由）
 p := proxy.New(proxy.WithSelector(
-    proxy.NewDiscoverySelector("api-svc", dis, round_robin.New()),
+    proxy.NewDiscoverySelector("api-svc", dis, roundrobin.New()),
 ))
 ```
 
@@ -762,7 +767,7 @@ broker.Publish(ctx, "orders.created", &mq.Message{Payload: []byte("x")})
 | `handler` 入口 | 自动 `ExtractMetadata(ctx, msg.Headers)`：`msg.Headers["baggage"]` → handler ctx |
 | `Handler` 内读取 | `propagation.Get(ctx, "tenant.id")` 直接拿到 |
 
-订阅侧可通过 `MQComponent.OnStart` 时 `GetType[mq.Broker](ctx)` 获取 broker 实例。
+订阅侧可通过 `MQComponent.OnStart` 时 `Type[mq.Broker](ctx)` 获取 broker 实例。
 
 ### 不自动传播的场景
 

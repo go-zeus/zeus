@@ -11,8 +11,8 @@
 //   - retry 包未来可注入 Backoff 接口替换其硬编码算法
 //
 // 并发安全：
-//   - 单个 Backoff 实例非线程安全（attempt 计数非原子）
-//   - 跨 goroutine 使用请每次重试创建新实例（标准做法）
+//   - 内置 Exponential / Constant 实现线程安全（内部 sync.Mutex 保护 attempt 计数），
+//     同一实例可被多个 goroutine 共享调用（如 cluster 维度复用同一 Backoff）
 package backoff
 
 import (

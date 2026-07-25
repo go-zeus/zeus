@@ -1,20 +1,22 @@
-// Package random 提供安全随机数生成工具。
+// Package random 提供随机数生成工具，分两条路径：
 //
-// 设计目的：
-//   - 提供区间随机数（RangeRand）等标准库没有的能力
-//   - 仅用 crypto/rand，保证密码学安全（不引入 math/rand 兼容性问题）
-//   - 零依赖（仅标准库）
+//   - 密码学安全路径（默认）：RangeRand / Int63 / Bytes 基于 crypto/rand，
+//     适合令牌、密钥、ID 等安全场景（~70ns/call）
+//   - 快速伪随机路径（Fast* 前缀）：FastRange / FastInt / FastString 基于
+//     math/rand/v2，适合 jitter / 采样 / 测试数据 / 随机后缀等无安全要求场景（~5ns/call）
+//
+// 快速路径非密码学安全，调用方按需选择。
 //
 // 不做的事：
 //   - 不提供 Min/Max/Abs 等通用数学函数（Go 1.21+ 已有 min/max 内置 + math.Abs）
-//   - 不提供伪随机（用 math/rand 用户自行 import）
-//   - 不提供 shuffle / sample（避免重复造轮子，math/rand/sampled 已有）
+//   - 不提供 shuffle / sample（避免重复造轮子）
 package random
 
 import (
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
+	mathrand "math/rand/v2"
 )
 
 // RangeRand 生成闭区间 [min, max] 的安全随机整数
@@ -99,4 +101,41 @@ func readUint64() (uint64, error) {
 		return 0, err
 	}
 	return binary.LittleEndian.Uint64(buf[:]), nil
+}
+
+// —— 快速伪随机路径（math/rand/v2，非密码学安全）——
+//
+// 适用：jitter 抖动、退避抖动、采样、测试数据、随机后缀等无安全要求的场景。
+// math/rand/v2 顶层函数并发安全且无全局锁（ChaCha8 自动种子），适合高频调用。
+
+// alphanum 快速随机字符串的字符集（数字 + 大小写字母）
+const alphanum = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+
+// FastRange 生成闭区间 [min, max] 的伪随机整数（非密码学安全，极快）。
+//
+// min > max 时 panic（与 math/rand/v2 惯例对齐，调用方应保证 min<=max）。
+func FastRange(min, max int64) int64 {
+	if min > max {
+		panic("random: min is greater than max")
+	}
+	return min + int64(mathrand.Uint64N(uint64(max-min)+1))
+}
+
+// FastInt 返回 [0, n) 的伪随机 int（非密码学安全）。
+// n <= 0 时 panic（透传 math/rand/v2 行为）。
+func FastInt(n int) int {
+	return mathrand.IntN(n)
+}
+
+// FastString 生成 n 位字母数字随机字符串（大小写字母+数字，非密码学安全）。
+// n <= 0 返回空串。密码学场景请用 Bytes + 自行编码。
+func FastString(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	b := make([]byte, n)
+	for i := range b {
+		b[i] = alphanum[mathrand.IntN(len(alphanum))]
+	}
+	return string(b)
 }

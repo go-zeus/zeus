@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -134,6 +135,71 @@ func TestConcurrentAccess(t *testing.T) {
 	if svc == nil {
 		t.Fatal("expected service after concurrent registers")
 	}
+}
+
+// TestGetService_ConcurrentIterationSafe 回归测试：
+// GetService 返回快照后，调用方无锁 range Clusters/Instances 必须与并发的
+// Register/Deregister 互不干扰。修复前直接返回内部 *ServiceEntry 指针，
+// 此场景会触发 "concurrent map iteration and map write" panic（-race 下必现）。
+func TestGetService_ConcurrentIterationSafe(t *testing.T) {
+	m := NewMemory().(*memory)
+	// 预置初始实例（分散到多个 cluster，使 Clusters map 非空）
+	for i := 0; i < 4; i++ {
+		cluster := "default"
+		if i%2 == 1 {
+			cluster = "canary"
+		}
+		_ = m.Register(context.Background(), &types.Instance{
+			ID: fmt.Sprintf("ins-%d", i), Name: "svc", Cluster: cluster,
+			IP: "127.0.0.1", Port: 9000 + i,
+		})
+	}
+
+	var wg sync.WaitGroup
+	const writers = 8
+	const readers = 8
+
+	// 写者：不断 Register/Deregister 实例，持续修改内部 Clusters map
+	for w := 0; w < writers; w++ {
+		wg.Add(1)
+		go func(w int) {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				cluster := "default"
+				if i%3 == 0 {
+					cluster = "canary"
+				}
+				ins := &types.Instance{
+					ID: fmt.Sprintf("w-%d-%d", w, i), Name: "svc", Cluster: cluster,
+					IP: "10.0.0.1", Port: 10000 + (i % 1000),
+				}
+				_ = m.Register(context.Background(), ins)
+				m.Deregister(context.Background(), ins)
+			}
+		}(w)
+	}
+
+	// 读者：GetService 拿快照后无锁遍历 Clusters 与 Instances
+	for r := 0; r < readers; r++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < 200; i++ {
+				svc, err := m.GetService(context.Background(), "svc")
+				if err != nil || svc == nil {
+					continue
+				}
+				// 无锁遍历快照的 map（修复前会 panic）
+				for _, cl := range svc.Clusters {
+					_ = cl.GetInstances()
+				}
+				for range svc.Instances {
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
 }
 
 // TestClose_ClosesAllWatchers Close 后所有 watcher channel 应被关闭

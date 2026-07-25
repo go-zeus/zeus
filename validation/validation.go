@@ -1,10 +1,14 @@
 // Package validation 提供轻量级链式校验工具。
 //
 // 设计目标：
-//   - 零依赖、零反射（避免 validator/v10 的复杂度）
+//   - 零依赖（反射仅用于类型断言未覆盖的兜底场景，见 reflect.go）
 //   - 链式 API：v.Required("name", name).MinLen("name", name, 1).MaxLen("name", name, 100).Err()
 //   - 与 errors 包联动：失败时返回带 HTTP code 的 *errors.Error
 //   - 可扩展：用户可自定义 Rule 函数挂到 Validator 上
+//
+// 数值精度：Min/Max 的阈值参数为 float64，内部将 val 统一转 float64 比较。
+// 超过 2^53（≈9e15）的 int64/uint64 大整数因 float64 精度限制可能误判，
+// 此类超大整数校验建议在业务层用整数比较。
 //
 // 与 go-playground/validator 的对比：
 //
@@ -27,6 +31,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode"
 
 	"github.com/go-zeus/zeus/errors"
@@ -245,7 +250,7 @@ func (v *Validator) Match(field, val, pattern string) *Validator {
 	if val == "" {
 		return v
 	}
-	re, err := regexp.Compile(pattern)
+	re, err := compiledRegex(pattern)
 	if err != nil {
 		v.fail(field, "pattern is invalid")
 		return v
@@ -455,7 +460,18 @@ func toFloat(val any) (float64, bool) {
 	return 0, false
 }
 
-// trimField 用于错误信息字段名规整（避免前后空白）
-func trimField(f string) string { return strings.TrimSpace(f) }
+// regexCache 缓存编译后的正则，避免 Match 在热路径上每次重新 Compile（Compile 含解析开销）。
+var regexCache sync.Map // pattern (string) -> *regexp.Regexp
 
-var _ = trimField // 保留以便未来扩展
+// compiledRegex 编译并缓存正则；相同 pattern 只编译一次，并发安全。
+func compiledRegex(pattern string) (*regexp.Regexp, error) {
+	if re, ok := regexCache.Load(pattern); ok {
+		return re.(*regexp.Regexp), nil
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil, err
+	}
+	regexCache.Store(pattern, re)
+	return re, nil
+}
