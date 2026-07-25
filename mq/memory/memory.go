@@ -102,13 +102,15 @@ func (b *broker) Publish(ctx context.Context, topic string, msg *mq.Message) err
 		b.mu.RUnlock()
 		return fmt.Errorf("mq.memory: broker closed")
 	}
-	// 自动注入 baggage（与 propagation 集成）
-	if msg.Headers == nil {
-		msg.Headers = make(map[string]string)
+	// 在本地副本上回填 Topic/Headers，不修改调用方 msg（避免调用方复用同一 *Message
+	// 重复 Publish 到不同 topic 时 Topic/Headers 互相污染），同时作为 per-subscriber 拷贝模板。
+	prepared := &mq.Message{Topic: topic, Payload: msg.Payload}
+	hdrs := make(map[string]string, len(msg.Headers))
+	for k, v := range msg.Headers {
+		hdrs[k] = v
 	}
-	propagation.InjectMetadata(ctx, msg.Headers)
-	// 回填 topic 便于 handler 直接读 msg.Topic
-	msg.Topic = topic
+	propagation.InjectMetadata(ctx, hdrs) // 自动注入 baggage
+	prepared.Headers = hdrs
 
 	// 复制订阅列表避免 Publish 期间被修改
 	subs := make([]*subscription, len(b.subscribers[topic]))
@@ -120,23 +122,41 @@ func (b *broker) Publish(ctx context.Context, topic string, msg *mq.Message) err
 		return nil
 	}
 
-	// fan-out：同步投递给每个订阅者的 channel
-	// 注意：ch 是无缓冲 channel，发送会阻塞直到 handler goroutine 取走
-	// 这是"慢消费者反压发布者"的设计选择
-	// 约束：handler 内严禁同步 Publish 同一 topic（会自死锁：handler 占用 runHandler
-	// 不读 ch，向同一 sub.ch 发送无接收者）。如需此能力请走 kafka/nats 插件。
+	// fan-out：同步投递给每个订阅者的 channel。
+	// ch 是无缓冲 channel，发送阻塞直到 handler goroutine 取走（"慢消费者反压发布者"设计）。
+	// 串行投递：单个慢订阅者会延迟后续订阅者收到，属已知限制（如需并行投递走 kafka/nats 插件）。
+	// 每订阅者深拷贝 msg：避免多 handler 共享同一 *Message 的 data race（handler 若写 msg.Headers/Payload）。
+	// 约束：handler 内严禁同步 Publish 同一 topic（会自死锁，handler 占用 runHandler 不读 ch）。
+	delivered := 0
 	for _, sub := range subs {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-sub.done:
-			// 订阅者已退出（ctx 取消或 broker Close），跳过，
-			// 避免向无接收者的 channel 发送而永久阻塞（修复 Close/Cancel 死锁）
+			// 订阅者已退出（ctx 取消或 broker Close），跳过，避免向无接收者 channel 永久阻塞
 			continue
-		case sub.ch <- msg:
+		case sub.ch <- cloneMessage(prepared):
+			delivered++
 		}
 	}
+	// 全部订阅者已退出（通常因并发 Close）：返回 error，避免调用方误以为发布成功
+	if delivered == 0 {
+		return fmt.Errorf("mq.memory: topic %q has no active subscriber (all closed)", topic)
+	}
 	return nil
+}
+
+// cloneMessage 深拷贝 Message（Headers map 独立），用于 fan-out 给每个订阅者独立副本，
+// 避免多 handler 共享同一 *Message 触发 data race。
+func cloneMessage(src *mq.Message) *mq.Message {
+	cp := &mq.Message{Topic: src.Topic, Payload: src.Payload}
+	if src.Headers != nil {
+		cp.Headers = make(map[string]string, len(src.Headers))
+		for k, v := range src.Headers {
+			cp.Headers[k] = v
+		}
+	}
+	return cp
 }
 
 // Subscribe 订阅 topic，handler 在后台 goroutine 调用

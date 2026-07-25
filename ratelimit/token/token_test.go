@@ -125,3 +125,32 @@ func TestAllow_RefillOverTime(t *testing.T) {
 		t.Error("Allow should succeed after refill")
 	}
 }
+
+// TestNewWithOptions_InitialFullBucketWhenRateLessThanBurst 验证 #1 修复：
+// 原 NewWithOptions 字面量 tokens=rate，当 rate<burst 时初始不满桶；现统一 tokens=burst（满桶）。
+// （TestWithRate_WithBurst 用 rate>burst，被 refill clamp 掩盖，无法暴露此 bug）
+func TestNewWithOptions_InitialFullBucketWhenRateLessThanBurst(t *testing.T) {
+	l := NewWithOptions(1, WithBurst(5)) // rate=1/s, burst=5
+	for i := 0; i < 5; i++ {
+		if !l.Allow() {
+			t.Fatalf("initial full bucket (rate<burst): request %d should be allowed", i+1)
+		}
+	}
+}
+
+// TestReserve_NoOversell 验证 #2 修复：Reserve 必须预占令牌（tokens 减负），
+// 后续 Allow 在时间补回前被拒。原实现不扣 tokens，N 个并发 Reserve 全部放行导致超卖。
+func TestReserve_NoOversell(t *testing.T) {
+	l := New(1, 1) // rate=1/s, burst=1
+	if !l.Allow() {
+		t.Fatal("first Allow should succeed (initial token)")
+	}
+	wd := l.Reserve()
+	if !wd.Allow || wd.Duration <= 0 {
+		t.Fatalf("Reserve on empty bucket should allow with positive wait, got %+v", wd)
+	}
+	// Reserve 已预占（tokens 减为负值），立即 Allow 应失败（需等 refill 补回 >=1，约 1s）
+	if l.Allow() {
+		t.Error("Allow right after Reserve should fail (token reserved, not yet refilled)")
+	}
+}

@@ -2,6 +2,7 @@ package roundrobin
 
 import (
 	"errors"
+	"math/rand/v2"
 	"sync/atomic"
 
 	"github.com/go-zeus/zeus/balancer"
@@ -34,7 +35,11 @@ func NewRoundRobin() balancer.Balancer {
 // 同一个 balancer 模板可派生多个独立 balancer，每个对应一个 cluster。
 // 修改 r 自身会导致多 cluster 共享状态，引发并发问题。
 func (r *roundRobinBalancer) Reload(ins []*types.Instance) balancer.Balancer {
-	return &roundRobinBalancer{instances: ins}
+	// 浅拷贝：避免调用方后续 append/修改底层数组影响 balancer 内部列表（防外部别名）
+	cp := make([]*types.Instance, len(ins))
+	copy(cp, ins)
+	// 随机起始游标：避免服务发现频繁 Reload 后，新 balancer 首轮 Next 系统性偏向 instances[0]
+	return &roundRobinBalancer{instances: cp, curIndex: rand.Uint64()}
 }
 
 func (r *roundRobinBalancer) Next() (*types.Instance, error) {

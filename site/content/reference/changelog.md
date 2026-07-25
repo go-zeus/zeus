@@ -32,6 +32,25 @@
 - **`app/options`**：L3 装配（`WithMeter`/`WithTracer`）检测同名 L4 组件并跳过默认，避免重复 `Register` panic（修复 L3/L4 混用卖点在 metrics/trace 维度的崩溃）
 - **`app/app`**：L4 手动模式用 `errors.Join` 聚合 run 与 stop 错误（原 stop 错误被 run 错误覆盖丢失，关闭期资源泄漏信号被吞）
 
+### Fixed — 深度审计：数据/治理域算法与并发（阶段C）
+
+负载均衡与缓存：
+- **`cache/memory`**：后台清理 `cleanupExpired` 改用 `CompareAndDelete`（CAS），与 `Get` 懒清理一致，修并发 `Set` 写入新值后被误删的 ABA；`Close` 等待 cleaner goroutine 退出，避免 `Close` 返回后仍有残留写
+- **`balancer/roundrobin`**：`Reload` 随机起始游标，避免服务发现频繁推流后首轮 `Next` 系统性偏向 `instances[0]`；`Reload` 浅拷贝实例 slice 防外部别名
+- **`balancer/random`**：改用 `math/rand/v2`（lock-free PCG）替代全局 `math/rand` 互斥锁；`Reload` 浅拷贝
+
+消息队列：
+- **`mq/memory`**：`Publish` 每订阅者深拷贝 `*Message`（Headers map 独立），修多 handler 共享同一 msg 的 data race；不再修改调用方 msg（Topic/Headers 回填改在本地副本）；并发 `Close` 导致全部订阅者已退出时返回 error（原静默返回 nil 让调用方误以为发布成功）
+
+治理算法（核心 bug）：
+- **`ratelimit/token`**：`NewWithOptions` 初始令牌统一满桶（`tokens=burst`），修原 `tokens=rate` 导致 `rate<burst` 时初始不满桶、首请求被错误拒绝
+- **`ratelimit/token`**：`Reserve` 预占令牌（tokens 减为负值），修原不扣减导致 N 个并发 `Reserve` 各自等待后全部放行的超卖（限流彻底失效）
+- **`circuitbreaker/counter`**：`Allow` 的 Open→HalfOpen 转换本次即计入探测（`halfOpenCnt=1`），修原 off-by-one 导致 `halfOpenMax=N` 实际放行 N+1（破坏"单请求试探"语义）；未知状态 fail-closed（拒绝）；`State()` 去除虚拟转换副作用（观察与实际放行一致）
+- **`retry/exponential`**：`Next` 在 float 域 clamp + `IsInf`/`IsNaN` 防护，修大 `count` 时 `math.Pow` 返回 `+Inf` 经饱和转换为负 `Duration`、退避归零引发重试风暴
+
+数据库：
+- **`database/sql`**：`BeginTx` 空 TxOption 传 `nil`（与 stdlib"未指定"语义一致）；`QueryRow` 文档明确 metrics status 恒 ok（错误延迟到 Scan，需准确错误 metrics 请用 `Query`）
+
 ### Changed (Breaking) — utils 工具包重设计 + 运行时加固
 
 - **`utils/time` → `utils/timex`**：包重命名并收敛 API。新增布局常量（`DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly`）+ 可变参数默认布局的 `Format`/`Parse` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek` 等）。import 路径与包名同步变更

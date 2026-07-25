@@ -168,6 +168,8 @@ func (d *db) Query(ctx context.Context, query string, args ...any) (database.Row
 //
 // 注意：*sql.Row 不暴露 Err，错误延迟到 Scan。span 在调用时即 End
 // （无法等到 Scan），故无法记录 Scan 错误，这是 stdlib 设计限制。
+// 同理，metrics 的 status 恒为 ok（QueryRow 路径无法感知 Scan 失败）——
+// 若需准确的错误 metrics，请改用 Query（返回 Rows，立即暴露 error）。
 func (d *db) QueryRow(ctx context.Context, query string, args ...any) database.Row {
 	ctx, _ = database.EnsureTxID(ctx)
 	spanCtx, span := d.startSpan(ctx, "db.query", query)
@@ -201,9 +203,13 @@ func (d *db) Exec(ctx context.Context, query string, args ...any) (stdsql.Result
 func (d *db) BeginTx(ctx context.Context, opts ...database.TxOption) (database.Tx, error) {
 	ctx, txID := database.EnsureTxID(ctx)
 
-	sqlOpts := &stdsql.TxOptions{}
+	// 空 TxOption 列表传 nil（与 stdlib "未指定"语义一致；个别 driver 对显式 LevelDefault vs nil 处理有差异）
+	var sqlOpts *stdsql.TxOptions
 	for _, opt := range opts {
 		if opt != nil {
+			if sqlOpts == nil {
+				sqlOpts = &stdsql.TxOptions{}
+			}
 			opt(sqlOpts)
 		}
 	}

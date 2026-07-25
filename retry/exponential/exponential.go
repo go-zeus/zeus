@@ -85,10 +85,14 @@ func (e *exponentialRetrier) Next() (time.Duration, bool) {
 	if e.count >= e.maxRetries {
 		return 0, false
 	}
-	delay := time.Duration(float64(e.baseDelay) * math.Pow(2, float64(e.count)))
-	if delay > e.maxDelay {
-		delay = e.maxDelay
+	// float 域比较 + IsInf/IsNaN 防护：大 count 时 math.Pow(2, count) 返回 +Inf，
+	// time.Duration(+Inf) 经饱和转换为 MinInt64（负值），原 `delay > maxDelay` 对负数不成立，
+	// 导致退避归零、重试风暴。先在 float 域 clamp 再转 Duration。
+	d := float64(e.baseDelay) * math.Pow(2, float64(e.count))
+	if math.IsInf(d, 1) || math.IsNaN(d) || d > float64(e.maxDelay) {
+		d = float64(e.maxDelay)
 	}
+	delay := time.Duration(d)
 	e.count++
 	return delay, true
 }

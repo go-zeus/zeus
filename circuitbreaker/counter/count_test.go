@@ -45,21 +45,18 @@ func TestHalfOpen_AllowLimitedRequests(t *testing.T) {
 	c.MarkFailed() // Closed -> Open
 	time.Sleep(80 * time.Millisecond)
 
-	// 第一次 Allow 触发 Open->HalfOpen 转换，允许通过
+	// 第一次 Allow 触发 Open->HalfOpen 转换，本次即第 1 个探测（halfOpenCnt=1）
 	if err := c.Allow(); err != nil {
-		t.Fatalf("first Allow (transition to HalfOpen) should be allowed, got %v", err)
+		t.Fatalf("first Allow (transition to HalfOpen, 探测1) should be allowed, got %v", err)
 	}
 
-	// HalfOpen 状态允许 halfOpenMax 次请求（halfOpenCnt 从 0 开始）
+	// halfOpenMax=2：第 2 个探测（halfOpenCnt: 1→2）仍允许
 	if err := c.Allow(); err != nil {
-		t.Fatalf("second Allow (halfOpenCnt=0) should be allowed, got %v", err)
+		t.Fatalf("second Allow (探测2) should be allowed, got %v", err)
 	}
-	if err := c.Allow(); err != nil {
-		t.Fatalf("third Allow (halfOpenCnt=1) should be allowed, got %v", err)
-	}
-	// 超过 halfOpenMax 后应被拒绝
+	// 已放行 2 个探测（= halfOpenMax），第 3 次应被拒绝（修复原 off-by-one：原放行 3 次）
 	if err := c.Allow(); err == nil {
-		t.Fatal("request exceeding halfOpenMax should be rejected")
+		t.Fatal("request exceeding halfOpenMax (2) should be rejected")
 	}
 }
 
