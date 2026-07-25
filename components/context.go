@@ -52,7 +52,7 @@ func AllByType[T any](ctx Context) ([]T, error) {
 type assemblyContext struct {
 	context.Context // 当前 stdlib context，由 withContext 临时替换
 
-	mu        sync.RWMutex
+	mu        *sync.RWMutex // 指针：所有 withContext 派生 ctx 共享同一把锁，避免并发读写 providers/byType 的数据竞争
 	providers map[string]any
 	order     *[]string // 按 set 调用顺序记录 name（所有派生 ctx 共享同一指针）
 	byType    map[reflect.Type]any
@@ -62,6 +62,7 @@ func newAssemblyContext() *assemblyContext {
 	order := make([]string, 0)
 	return &assemblyContext{
 		Context:   context.Background(),
+		mu:        &sync.RWMutex{},
 		providers: make(map[string]any),
 		order:     &order,
 		byType:    make(map[reflect.Type]any),
@@ -76,6 +77,7 @@ func (c *assemblyContext) withContext(ctx context.Context) *assemblyContext {
 	}
 	return &assemblyContext{
 		Context:   ctx,
+		mu:        c.mu, // 共享同一把锁
 		providers: c.providers,
 		order:     c.order, // 共享指针：派生 ctx 看到 set() 后的最新 order
 		byType:    c.byType,

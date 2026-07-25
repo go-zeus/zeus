@@ -42,7 +42,7 @@ Zeus 是一个零依赖、可插拔的 Go 微服务框架。采用现代 Go 构�
 | Server 协议选择 | 按 handler 类型推断（`http.Handler` → HTTP，`*grpc.Server` → gRPC） |
 | 注册中心 | `registry/memory`（L1）/ 用户指定 URL（L2+） |
 | 日志 | `log/slog`（输出到 stdout） |
-| 中间件 | requestid → accesslog → recovery（外→内，仅在使用 DefaultHandler 时自动包装） |
+| 中间件 | recovery → requestid → accesslog（外→内，仅在使用 DefaultHandler 时自动包装） |
 | 健康检查 | `/health` `/health/ready` `/health/live`（仅在使用 DefaultHandler 时注册；用户传自定义 handler 需自行挂载） |
 | Metrics | **非默认装配**：L1 `app.Run` 不注入 meter、不注册 `/metrics`；需经 L3 `WithMeter` + `metricsmw` 显式启用 |
 | 信号处理 | SIGTERM/SIGINT/SIGQUIT → 优雅关闭（10s 超时） |

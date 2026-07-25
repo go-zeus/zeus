@@ -1,7 +1,7 @@
 # zeus
 
 [![CI](https://github.com/go-zeus/zeus/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/go-zeus/zeus/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-88.6%25-brightgreen)](https://github.com/go-zeus/zeus)
+[![Coverage](https://img.shields.io/badge/coverage-87.4%25-brightgreen)](https://github.com/go-zeus/zeus)
 [![Go Version](https://img.shields.io/badge/go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![License](https://img.shields.io/github/license/go-zeus/zeus?color=blue)](./LICENSE)
 [![Security Policy](https://img.shields.io/badge/security-policy-blue)](./SECURITY.md)
@@ -40,7 +40,7 @@ func main() {
 
 零配置自动启用：
 - **slog logger** → stdout
-- **requestid + accesslog + recovery 中间件**
+- **recovery + requestid + accesslog 中间件**
 - **memory 注册中心** + 自动注册
 - **优雅关闭**（SIGTERM/SIGINT，10s 超时）
 

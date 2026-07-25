@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"sync"
 )
 
@@ -83,6 +84,13 @@ func (c *Config) Watch() error {
 	c.watcher = w
 	c.mu.Unlock()
 	go func() {
+		// 配置加载器实现（含 plugins/config/etcd、k8s）panic 不应拖垮整个进程；
+		// recover 后退出 watcher，与 mq/job/batch 等包的 goroutine 入口约定一致。
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("config: watcher panic recovered: %v", r)
+			}
+		}()
 		for {
 			kvs, err := w.Next()
 			if err != nil {

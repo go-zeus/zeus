@@ -2,7 +2,7 @@ package random
 
 import (
 	"errors"
-	"math/rand"
+	"math/rand/v2"
 
 	"github.com/go-zeus/zeus/balancer"
 	"github.com/go-zeus/zeus/types"
@@ -32,12 +32,16 @@ func NewRandom() balancer.Balancer {
 // 修改 r 自身会导致多 cluster 共享状态，引发并发问题。
 // 该契约与 roundrobin.Reload 一致，被 client/proxy 调用方依赖。
 func (r *randomBalancer) Reload(ins []*types.Instance) balancer.Balancer {
-	return &randomBalancer{instances: ins}
+	// 浅拷贝：避免调用方后续 append/修改底层数组影响 balancer 内部列表（防外部别名）
+	cp := make([]*types.Instance, len(ins))
+	copy(cp, ins)
+	return &randomBalancer{instances: cp}
 }
 
 func (r *randomBalancer) Next() (*types.Instance, error) {
 	if len(r.instances) == 0 {
 		return nil, ErrNoInstances
 	}
-	return r.instances[rand.Intn(len(r.instances))], nil
+	// math/rand/v2 顶层函数 per-goroutine lock-free（PCG），高并发优于 math/rand 全局锁
+	return r.instances[rand.IntN(len(r.instances))], nil
 }

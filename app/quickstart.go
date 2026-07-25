@@ -260,9 +260,10 @@ func resolveServer(handler any, cfg *Config) (server.Server, string, error) {
 
 // wrapHTTPMiddleware 给 HTTP handler 包装默认中间件链。
 //
-// 顺序（外→内）：requestid → accesslog → recovery → user handler
+// 顺序（外→内）：recovery → requestid → accesslog → user handler
 // 包装顺序说明：最先调用的 HTTPMiddleware 是最内层，最后调用的 HTTPMiddleware 是最外层。
-// 因此 requestid 必须最后包装（成为最外层），accesslog 才能从 ctx 读到 request id。
+// recovery 最外层（ChainHandler 最后包装），捕获 requestid/accesslog/user 的所有 panic；
+// requestid 次外层注入 id，accesslog 内层从 ctx 读 id 记录。
 func wrapHTTPMiddleware(httpHandler http.Handler) http.Handler {
 	if httpHandler == nil {
 		return nil

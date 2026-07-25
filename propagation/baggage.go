@@ -10,7 +10,7 @@
 // 简化决策：
 //   - 不处理 properties（;key=value 部分），解码时忽略
 //   - 编码时对非 token 字符一律 percent-encode
-//   - token 字符集：字母数字 + !#$%&'*+-.^_`|~ (RFC 7230)
+//   - token 字符集：字母数字 + !#$&'*+-.^_`|~（注意：% 不在白名单，见 isTokenChar 说明）
 package propagation
 
 import (
@@ -21,8 +21,10 @@ import (
 
 // isTokenChar 判断字符是否为合法 token 字符（无需 encode）。
 //
-// 参考 RFC 7230: tchar = "!" / "#" / "$" / "%" / "&" / "'" / "*" / "+" / "-" / "." /
-// "^" / "_" / "`" / "|" / "~" / DIGIT / ALPHA
+// 参考 RFC 7230 tchar，但关键差异：% 不视为 token 字符。
+// 原因：baggage value 用 percent-encode 表示特殊字符，decode 走 url.PathUnescape；
+// 若 % 在白名单（encode 不转义），孤立 % 会让 decode 报 "invalid URL escape" 丢弃整个 entry
+// （例如 value "100%" 跨进程后丢失）。故 % 必须总被 encode（"100%" → "100%25"），保证编解码对称。
 func isTokenChar(c byte) bool {
 	switch {
 	case c >= 'a' && c <= 'z':
@@ -33,7 +35,7 @@ func isTokenChar(c byte) bool {
 		return true
 	}
 	switch c {
-	case '!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
+	case '!', '#', '$', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~':
 		return true
 	}
 	return false

@@ -407,13 +407,22 @@ func buildComponents(cfg *appConfig) []any {
 		comps = append(comps, components.NewMiddlewareComponent(mw))
 	}
 
-	// 6. Metrics（仅非 nil）
-	if cfg.meter != nil {
+	// 收集 L4 extraComps 中已声明的组件名，避免默认装配与同名 L4 组件重复导致 Register panic
+	// （L3/L4 混用卖点：WithMeter(m) + components.NewMetricsComponent(m2) 不应 panic）
+	existingNames := make(map[string]bool)
+	for _, c := range cfg.extraComps {
+		if comp, ok := c.(components.Component); ok {
+			existingNames[comp.Name()] = true
+		}
+	}
+
+	// 6. Metrics（仅非 nil 且无同名 L4 组件）
+	if cfg.meter != nil && !existingNames["metrics"] {
 		comps = append(comps, components.NewMetricsComponent(cfg.meter))
 	}
 
-	// 7. Trace（仅非 nil）
-	if cfg.tracer != nil {
+	// 7. Trace（仅非 nil 且无同名 L4 组件）
+	if cfg.tracer != nil && !existingNames["trace"] {
 		comps = append(comps, components.NewTraceComponent(cfg.tracer))
 	}
 

@@ -66,8 +66,13 @@ func (s *ServiceEntry) Reload(ins []*Instance) {
 	s.Instances = make(map[string]*Instance)
 	s.Clusters = make(map[string]*Cluster)
 	for _, i := range ins {
-		// Reload 是全量重建，正常情况下不会有重复 id；
-		// 若上游传入了重复 id（异常情况），以最后一条为准并记录到 Instances（覆盖式）
+		// Reload 是全量重建，正常情况下不会有重复 id。
+		// 若上游传入重复 id（异常情况），跳过后续重复项以保持 Instances 与 Clusters
+		// 两个索引一致——避免 Instances 覆盖写入但 Cluster.AddInstance 拒绝（重复）导致
+		// 路由层（按 Cluster 选实例）与状态层（按 ID 列实例）行为分裂。
+		if _, exists := s.Instances[i.ID]; exists {
+			continue
+		}
 		s.Instances[i.ID] = i
 		if _, ok := s.Clusters[i.Cluster]; !ok {
 			s.Clusters[i.Cluster] = NewCluster(i.Cluster)

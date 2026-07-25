@@ -232,6 +232,9 @@ func (c *cacheImpl) Close() error {
 	c.once.Do(func() {
 		close(c.stop)
 	})
+	// 等待 cleaner goroutine 退出，避免 Close 返回后仍有残留 Range/Delete 写操作。
+	// cleanupInterval<=0 时 done 在 startCleaner 已关闭，此处立即返回。
+	<-c.done
 	return nil
 }
 
@@ -268,7 +271,9 @@ func (c *cacheImpl) cleanupExpired() {
 	c.data.Range(func(key, value any) bool {
 		e := value.(*entry)
 		if e.expired(now) {
-			c.data.Delete(key)
+			// CAS 防护：仅当 map 中仍是这个过期 entry 才删除，避免并发 Set 写入新值被误删
+			// （与 Get 懒清理路径 CompareAndDelete 一致，形成统一 ABA 防护契约）
+			c.data.CompareAndDelete(key.(string), e)
 		}
 		return true
 	})

@@ -72,19 +72,22 @@ func (m *memory) Watch(_ context.Context, _ string) (<-chan struct{}, error) {
 	return ch, nil
 }
 
-// Close 关闭所有 watcher channel 并标记 registry 为已关闭
-// 调用方应在应用关闭时调用，避免 watcher goroutine 泄漏
-func (m *memory) Close() {
+// Close 关闭所有 watcher channel 并标记 registry 为已关闭。
+// 实现 io.Closer，使 components.RegistryComponent.OnStop 能通过 io.Closer 类型断言
+// 自动关闭默认 memory registry（否则 watcher channel 不被关闭，下游阻塞监听者无法感知退出）。
+// 调用方应在应用关闭时调用，避免 watcher goroutine 泄漏。
+func (m *memory) Close() error {
 	m.wmu.Lock()
 	defer m.wmu.Unlock()
 	if m.closed {
-		return
+		return nil
 	}
 	m.closed = true
 	for ch := range m.watchers {
 		close(ch)
 		delete(m.watchers, ch)
 	}
+	return nil
 }
 
 // notifyWatchers 通知所有 watcher，采用 fan-out 模式分发事件

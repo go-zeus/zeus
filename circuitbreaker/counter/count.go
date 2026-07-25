@@ -91,7 +91,8 @@ func (c *countDriver) Allow() error {
 	case circuitbreaker.StateOpen:
 		if time.Since(c.openedAt) > c.timeout {
 			c.state = circuitbreaker.StateHalfOpen
-			c.halfOpenCnt = 0
+			c.halfOpenCnt = 1 // 本次即第 1 个探测（修复 off-by-one：原 halfOpenCnt=0 + HalfOpen 分支 +1 导致 halfOpenMax=N 实际放行 N+1，破坏"单请求试探"语义）
+			c.successes = 0
 			return nil
 		}
 		return ErrCircuitOpen
@@ -101,8 +102,9 @@ func (c *countDriver) Allow() error {
 			return nil
 		}
 		return ErrCircuitOpen
+	default:
+		return ErrCircuitOpen // 未知状态 fail-closed（拒绝），不放行
 	}
-	return nil
 }
 
 func (c *countDriver) MarkSuccess() {
@@ -138,11 +140,11 @@ func (c *countDriver) MarkFailed() {
 	}
 }
 
+// State 返回当前状态（无副作用查询）。
+// 不在此处做 Open→HalfOpen 的"虚拟转换"——原实现让监控看到 HalfOpen 但 Allow() 仍可能
+// 返回 ErrCircuitOpen（真正转换发生在下一次 Allow），观察与实际放行不一致。现统一：仅返回 c.state。
 func (c *countDriver) State() circuitbreaker.State {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.state == circuitbreaker.StateOpen && time.Since(c.openedAt) > c.timeout {
-		return circuitbreaker.StateHalfOpen
-	}
 	return c.state
 }

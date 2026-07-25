@@ -83,6 +83,12 @@ func (c *Container) Start(ctx context.Context) error {
 	}
 	c.mu.Unlock()
 
+	// 并发契约：Start/Stop 假定由单一协调者（如 components.App）顺序调用。
+	// 此处释放锁执行 Provide/OnStart 期间 started 尚未置 true，若并发 Stop 会被
+	// 误判为"未启动"而静默返回、或并发 Start 触发双启动——属已知限制。
+	// 不引入复杂状态机以避免死锁（OnStart 可能阻塞，Stop 等待 starting 需额外协调）。
+	// 按契约使用（Start 完成后再 Stop）则安全；深度改进见后续迭代。
+
 	// 按序调用 Provide（注入用户 context）
 	actx := c.ctx.withContext(ctx)
 	for _, name := range order {
@@ -146,10 +152,10 @@ func (c *Container) stopReverse(ctx context.Context, order []string, comps map[s
 		if name == stopBefore {
 			continue
 		}
-		// 检查 context 是否已取消
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+		// best-effort：即使 ctx 超时也继续调用剩余 OnStop，保证 trace flush / DB 连接池关闭 /
+		// cache 后台清理等资源释放不被静默跳过（原 ctx.Err 早退会让排在后面的组件全部漏关，
+		// 造成 span 丢失、连接泄漏、goroutine 累积）。
+		// actx 已取消时，响应 ctx 的组件会快速失败返回；不响应 ctx 的组件应在自身实现中修正。
 		comp := comps[name]
 		lc := comp.Lifecycle()
 		if lc.OnStop != nil {
@@ -157,6 +163,11 @@ func (c *Container) stopReverse(ctx context.Context, order []string, comps map[s
 				firstErr = fmt.Errorf("components: %q stop failed: %w", name, err)
 			}
 		}
+	}
+	// ctx 已取消（优雅关闭超时）：best-effort 已尝试所有 OnStop，
+	// 仍返回 ctx.Err() 通知调用方"关闭不完整"（资源释放已尽力，但超时信号不能丢）。
+	if firstErr == nil && ctx.Err() != nil {
+		return ctx.Err()
 	}
 	return firstErr
 }
