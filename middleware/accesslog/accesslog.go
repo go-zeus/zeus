@@ -7,6 +7,7 @@
 package accesslog
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -42,14 +43,17 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		duration := time.Since(start)
 		reqID := requestid.FromContext(r.Context())
 
-		log.Info("req %s %s status=%d duration=%s ip=%s request_id=%s",
+		// 用 log.Default().Log + r.Context()：让注入的 logger（WithLogger/SetDefault）生效，
+		// 且 cluster/baggage 经 ctx 自动注入为 Field（包级 log.Info 用 context.Background 会丢这些，
+		// 导致 access log 永远缺 cluster 标记，违反三件套联动一致性）
+		log.Default().Log(r.Context(), log.LevelInfo, fmt.Sprintf("req %s %s status=%d duration=%s ip=%s request_id=%s",
 			r.Method,
 			r.URL.Path,
 			rec.status,
 			duration,
 			clientIP(r),
 			reqID,
-		)
+		))
 	})
 }
 

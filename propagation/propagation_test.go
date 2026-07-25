@@ -416,13 +416,15 @@ func TestConstants(t *testing.T) {
 
 // TestTokenChar 边界字符判断
 func TestTokenChar(t *testing.T) {
-	tokenChars := "!#$%&'*+-.^_`|~abcXYZ09"
+	// 注意：% 不在 token 白名单——baggage value 的 % 必须 percent-encode，
+	// 否则与 decode 的 PathUnescape 不对称导致数据丢失（见 isTokenChar 注释）
+	tokenChars := "!#$&'*+-.^_`|~abcXYZ09"
 	for i := 0; i < len(tokenChars); i++ {
 		if !isTokenChar(tokenChars[i]) {
 			t.Errorf("char %q should be token", tokenChars[i])
 		}
 	}
-	nonTokenChars := " ;/<>?@[]{}\""
+	nonTokenChars := " %;/<>?@[]{}\""
 	for i := 0; i < len(nonTokenChars); i++ {
 		if isTokenChar(nonTokenChars[i]) {
 			t.Errorf("char %q should NOT be token", nonTokenChars[i])

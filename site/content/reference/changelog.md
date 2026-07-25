@@ -51,6 +51,14 @@
 数据库：
 - **`database/sql`**：`BeginTx` 空 TxOption 传 `nil`（与 stdlib"未指定"语义一致）；`QueryRow` 文档明确 metrics status 恒 ok（错误延迟到 Scan，需准确错误 metrics 请用 `Query`）
 
+### Fixed — 深度审计：可观测链路一致性（阶段D）
+
+- **`propagation/baggage`**（Critical）：`isTokenChar` 移除 `%`，修编解码不对称——原 `%` 在白名单导致 Encode 不转义，Decode 的 `PathUnescape` 遇孤立 `%` 报 "invalid URL escape" 丢弃整个 entry（如 value `100%` 跨进程后丢失，且无任何错误提示）。现 `%` 总被 encode（`100%` → `100%25`），编解码对称
+- **`middleware/accesslog`**：改用 `log.Default().Log(r.Context(), ...)`，让注入的 logger（`WithLogger`/`SetDefault`）生效且 cluster/baggage 经 ctx 自动注入为 Field（原包级 `log.Info` 用 `context.Background`，access log 永远缺 cluster 标记，违反三件套联动一致性）
+- **`metrics/noop`**：`Counter`/`Histogram`/`Gauge` 改返回共享单例，避免每次操作堆分配（落实"noop 零开销"承诺）
+- **`log/slog`**：`Log` 透传 ctx（原用 `context.Background`，slog handler 无法基于 ctx 做 sampling/trace 关联）
+- **`utils/uuid`**：`fallbackUUID` 去掉 v4 标记位（应急 ID 非 RFC 4122 v4 随机，诚实标识不假冒 v4）
+
 ### Changed (Breaking) — utils 工具包重设计 + 运行时加固
 
 - **`utils/time` → `utils/timex`**：包重命名并收敛 API。新增布局常量（`DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly`）+ 可变参数默认布局的 `Format`/`Parse` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek` 等）。import 路径与包名同步变更

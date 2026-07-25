@@ -49,7 +49,9 @@ func fallbackUUID() string {
 	for i := 0; i < 8; i++ {
 		buf[8+i] = byte(seq >> (i * 8))
 	}
-	applyV4Markers(buf[:])
+	// 不套 v4 标记位：这是 crypto/rand 失败的应急 ID（时间戳+计数器），非 RFC 4122 v4 随机。
+	// 格式仍为 UUID（通过 PostgreSQL uuid 类型格式校验），但 IsV4 返回 false（诚实标识，
+	// 不假冒 v4 以免大规模熵池耗尽时被误当真随机 v4）。
 	id, _ := FormatUUID(buf[:])
 	return id
 }
