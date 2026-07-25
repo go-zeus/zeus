@@ -152,10 +152,10 @@ func (c *Container) stopReverse(ctx context.Context, order []string, comps map[s
 		if name == stopBefore {
 			continue
 		}
-		// 检查 context 是否已取消
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
+		// best-effort：即使 ctx 超时也继续调用剩余 OnStop，保证 trace flush / DB 连接池关闭 /
+		// cache 后台清理等资源释放不被静默跳过（原 ctx.Err 早退会让排在后面的组件全部漏关，
+		// 造成 span 丢失、连接泄漏、goroutine 累积）。
+		// actx 已取消时，响应 ctx 的组件会快速失败返回；不响应 ctx 的组件应在自身实现中修正。
 		comp := comps[name]
 		lc := comp.Lifecycle()
 		if lc.OnStop != nil {
@@ -163,6 +163,11 @@ func (c *Container) stopReverse(ctx context.Context, order []string, comps map[s
 				firstErr = fmt.Errorf("components: %q stop failed: %w", name, err)
 			}
 		}
+	}
+	// ctx 已取消（优雅关闭超时）：best-effort 已尝试所有 OnStop，
+	// 仍返回 ctx.Err() 通知调用方"关闭不完整"（资源释放已尽力，但超时信号不能丢）。
+	if firstErr == nil && ctx.Err() != nil {
+		return ctx.Err()
 	}
 	return firstErr
 }

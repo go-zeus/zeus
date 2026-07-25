@@ -116,8 +116,16 @@ func (s *ServerComponent) Lifecycle() Lifecycle {
 					firstErr = err
 				}
 			}
-			// 等待所有 server.Serve 返回，避免 goroutine 泄漏
-			s.wg.Wait()
+			// 等待所有 server.Serve 返回，避免 goroutine 泄漏。
+			// 若 ctx 超时则放弃等待并记录，避免 OnStop 永久阻塞（某些 Server 实现的
+			// Serve 可能不响应 Shutdown）——这会卡住整个 stopReverse 导致进程无法退出。
+			waitDone := make(chan struct{})
+			go func() { s.wg.Wait(); close(waitDone) }()
+			select {
+			case <-waitDone:
+			case <-ctx.Done():
+				log.Error("server component: Stop 等待 Serve 退出超时，可能存在 goroutine 泄漏")
+			}
 			// 若 server 运行期出错，优先返回该错误
 			if s.startErr != nil {
 				return s.startErr

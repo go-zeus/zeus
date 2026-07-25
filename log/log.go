@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/go-zeus/zeus/propagation"
 	"github.com/go-zeus/zeus/routing"
@@ -69,9 +70,27 @@ func (l *Logger) Error(msg string, args ...any) {
 // 采用 fmt.Sprint 拼接（非格式化），与标准库 log.Fatal 语义对齐；需要格式化用 Fatalf。
 // 退出前 best-effort 调用 Writer.Close 触发异步/缓冲 writer（如 file_rotate）的 flush，
 // 避免 FATAL 日志停留在缓冲区随 os.Exit 丢失。
+// fatalCloseTimeout Fatal 路径 Writer.Close 的最大等待时长。
+// 注入的 writer（如 plugins/log/file_rotate）若 Close 阻塞（内部锁等待、底层 fs 慢），
+// 不能让 Fatal 路径永久卡死——进程既不退出也无法继续服务。超时后放弃 flush 直接退出。
+const fatalCloseTimeout = 2 * time.Second
+
+// closeWriterBestEffort 尽力关闭 writer，超时放弃。用于 Fatal/Fatalf 路径。
+func closeWriterBestEffort(w Writer) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = w.Close()
+	}()
+	select {
+	case <-done:
+	case <-time.After(fatalCloseTimeout):
+	}
+}
+
 func (l *Logger) Fatal(v ...any) {
 	l.Log(context.Background(), LevelFatal, fmt.Sprint(v...))
-	_ = l.writer.Close()
+	closeWriterBestEffort(l.writer)
 	os.Exit(1)
 }
 
@@ -80,7 +99,7 @@ func (l *Logger) Fatal(v ...any) {
 // （修复 Fatal 与其它级别格式化行为不一致的问题）。
 func (l *Logger) Fatalf(msg string, args ...any) {
 	l.Log(context.Background(), LevelFatal, fmt.Sprintf(msg, args...))
-	_ = l.writer.Close()
+	closeWriterBestEffort(l.writer)
 	os.Exit(1)
 }
 
