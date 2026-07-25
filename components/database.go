@@ -77,16 +77,17 @@ func (c *DatabaseComponent) Provide(_ Context) (any, error) {
 // Lifecycle OnStart 调 Ping；OnStop 调 Close
 func (c *DatabaseComponent) Lifecycle() Lifecycle {
 	return Lifecycle{
-		OnStart: func(_ Context) error {
+		OnStart: func(ctx Context) error {
 			if c.db == nil {
 				return nil
 			}
 			if !c.pingOnStart {
 				return nil
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), c.pingTimeout)
+			// 用容器注入的 ctx 派生超时，使启动期取消（如收到 SIGTERM）能及时中断 Ping
+			pingCtx, cancel := context.WithTimeout(ctx, c.pingTimeout)
 			defer cancel()
-			if err := c.db.Ping(ctx); err != nil {
+			if err := c.db.Ping(pingCtx); err != nil {
 				return fmt.Errorf("database: ping failed: %w", err)
 			}
 			log.Info("database connected (ping ok)")

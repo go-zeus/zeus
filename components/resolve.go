@@ -55,7 +55,15 @@ func resolve(comps map[string]Component) ([]string, error) {
 	}
 
 	if len(order) != len(comps) {
-		return nil, fmt.Errorf("components: circular dependency detected")
+		// 收集入度仍 >0 的节点（环上的候选），帮助用户定位循环依赖
+		var cyclic []string
+		for name, deg := range inDegree {
+			if deg > 0 {
+				cyclic = append(cyclic, name)
+			}
+		}
+		sort.Strings(cyclic)
+		return nil, fmt.Errorf("components: circular dependency detected among %v", cyclic)
 	}
 
 	return order, nil

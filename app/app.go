@@ -100,9 +100,7 @@ func (a *app) Run(close <-chan struct{}) error {
 			stopErr = fmt.Errorf("app: server stop failed: %w", err)
 		}
 	}
-	// 优先返回 run 错误，stop 错误次之
-	if runErr != nil {
-		return runErr
-	}
-	return stopErr
+	// 聚合 run 与 stop 错误，避免关闭期错误（资源泄漏信号）被 run 错误覆盖丢失。
+	// errors.Join 对 nil 参数透明：纯信号退出（runErr=信号, stopErr=nil）行为不变。
+	return errors.Join(runErr, stopErr)
 }

@@ -21,6 +21,17 @@
 - **`middleware/requestid`**：`generateID` 在 `crypto/rand` 失败时 fallback（避免全零 ID 导致 trace 关联失效）
 - **`database/sql`**：删除 `QueryRow`/`tx.QueryRow` 中多余的 `_ = ctx` 死代码（ctx 已用于 `startSpan`，baggage 经 spanCtx 正确传递）
 
+### Fixed — 深度审计：核心运行时生命周期与类型装配（阶段B）
+
+- **`components/container`**：`stopReverse` 去掉 `ctx.Err` 早退，best-effort 调用所有 OnStop（原超时跳过剩余组件，导致 trace flush / DB 连接池关闭 / cache 清理被静默漏关，造成 span 丢失、连接泄漏、goroutine 累积）；结尾仍返回 `ctx.Err` 通知"关闭不完整"
+- **`components/context`**：`assemblyContext.mu` 改 `*sync.RWMutex` 指针，`withContext` 派生 ctx 共享同一把锁（原值字段导致派生 ctx 拿独立新锁，并发读写 `providers`/`byType` 是数据竞争，race detector 触发）
+- **`components/server`**：`OnStop` 的 `wg.Wait` 加 ctx 保护，避免某些 Server 实现的 Serve 不响应 Shutdown 时永久阻塞、卡死整个关闭流程
+- **`app/quickstart` + `CLAUDE.md`**：默认中间件链顺序修正为 `recovery → requestid → accesslog`（代码实际语义 recovery 最外层捕获所有 panic；原文档 `requestid → accesslog → recovery` 错误）
+- **`components/resolve`**：循环依赖报错列出环上候选节点，便于定位
+- **`components/database`**：`OnStart` Ping 用容器注入的 ctx 派生超时（原 `context.Background()` 不响应启动期取消）
+- **`app/options`**：L3 装配（`WithMeter`/`WithTracer`）检测同名 L4 组件并跳过默认，避免重复 `Register` panic（修复 L3/L4 混用卖点在 metrics/trace 维度的崩溃）
+- **`app/app`**：L4 手动模式用 `errors.Join` 聚合 run 与 stop 错误（原 stop 错误被 run 错误覆盖丢失，关闭期资源泄漏信号被吞）
+
 ### Changed (Breaking) — utils 工具包重设计 + 运行时加固
 
 - **`utils/time` → `utils/timex`**：包重命名并收敛 API。新增布局常量（`DateTime`/`DateTimeMs`/`DateOnly`/`TimeOnly`）+ 可变参数默认布局的 `Format`/`Parse` + 范围辅助（`BeginningOfDay`/`EndOfDay`/`BeginningOfWeek` 等）。import 路径与包名同步变更
