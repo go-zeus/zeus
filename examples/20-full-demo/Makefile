@@ -40,7 +40,7 @@ build:
 	@mkdir -p $(BIN)
 	@for svc in $(SERVICES); do \
 		echo "→ building $$svc..."; \
-		cd $(ROOT) && go build -o examples/20-full-demo/$(BIN)/$$svc ./examples/20-full-demo/cmd/$$svc; \
+		(cd $(ROOT) && go build -o examples/20-full-demo/$(BIN)/$$svc ./examples/20-full-demo/cmd/$$svc); \
 	done
 
 # === 本地运行（直接启动二进制，无容器）===
@@ -129,14 +129,36 @@ logs-dc:
 #   空（默认）  = 本地镜像名 zeus-<svc>:latest + load 到 minikube/kind（imagePullPolicy=Never）
 #   非空       = tag 为 $(REGISTRY)/zeus-<svc>:latest 并 push（私有仓库场景，如 make k8s-images REGISTRY=hub.wang.dd:5000）
 REGISTRY ?=
+# BASE_REGISTRY 决定基础镜像来源（离线/内网环境）：
+#   空（默认）  = 多阶段构建（service.Dockerfile，基础镜像从 Docker Hub 拉 golang:1.22-alpine）
+#   非空       = 宿主机交叉编译（GOOS=linux GOARCH=amd64）+ service-hostbuild.Dockerfile，
+#                基础镜像用 $(BASE_REGISTRY)/library/busybox 与 library/nginx（内网 registry 需预置）
+#   示例：make k8s-images REGISTRY=hub.wang.dd:5000 BASE_REGISTRY=hub.wang.dd:5000
+BASE_REGISTRY ?=
 k8s-images:
+	@if [ -n "$(BASE_REGISTRY)" ]; then \
+		echo "→ cross-compiling (linux/amd64)..."; \
+		mkdir -p $(BIN); \
+		for svc in $(SERVICES); do \
+			(cd $(ROOT) && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
+				go build -trimpath -ldflags="-s -w" -o examples/20-full-demo/$(BIN)/$$svc ./examples/20-full-demo/cmd/$$svc); \
+		done; \
+	fi
 	@for svc in $(SERVICES) frontend; do \
 		if [ -n "$(REGISTRY)" ]; then name=$(REGISTRY)/zeus-$$svc:latest; else name=zeus-$$svc:latest; fi; \
 		echo "→ building $$name..."; \
 		if [ "$$svc" = "frontend" ]; then \
-			docker build -t $$name -f docker/frontend.Dockerfile $(ROOT); \
+			if [ -n "$(BASE_REGISTRY)" ]; then \
+				docker build --platform linux/amd64 -t $$name -f docker/frontend.Dockerfile --build-arg NGINX_IMAGE=$(BASE_REGISTRY)/library/nginx:stable $(ROOT); \
+			else \
+				docker build -t $$name -f docker/frontend.Dockerfile $(ROOT); \
+			fi; \
 		else \
-			docker build -t $$name -f $(DOCKERFILE) --build-arg SVC=$$svc $(ROOT); \
+			if [ -n "$(BASE_REGISTRY)" ]; then \
+				docker build --platform linux/amd64 -t $$name -f docker/service-hostbuild.Dockerfile --build-arg SVC=$$svc --build-arg RUNTIME_IMAGE=$(BASE_REGISTRY)/library/busybox:latest $(ROOT); \
+			else \
+				docker build -t $$name -f $(DOCKERFILE) --build-arg SVC=$$svc $(ROOT); \
+			fi; \
 		fi; \
 	done
 	@echo ""

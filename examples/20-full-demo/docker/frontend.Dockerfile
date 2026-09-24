@@ -3,7 +3,10 @@
 # Build context = zeus repo 根：
 #   docker build -t zeus-frontend -f examples/20-full-demo/docker/frontend.Dockerfile ..
 
-FROM nginx:alpine
+# 基础镜像可参数化：内网环境传 --build-arg NGINX_IMAGE=<registry>/library/nginx:stable
+# （默认 nginx:alpine，外网可达时行为不变）
+ARG NGINX_IMAGE=nginx:alpine
+FROM ${NGINX_IMAGE}
 
 # 拷贝前端静态资源
 COPY examples/20-full-demo/frontend/ /usr/share/nginx/html/

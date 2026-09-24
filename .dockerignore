@@ -1,0 +1,10 @@
+# 构建上下文瘦身（service.Dockerfile 的 COPY . . 需要 Go 源码，此处只排除非构建产物）
+# 注意：examples/20-full-demo/bin 不能排除 —— service-hostbuild.Dockerfile（离线模式）
+# 需要 COPY 宿主机交叉编译的二进制进镜像
+.git
+.claude
+**/node_modules
+examples/20-full-demo/logs
+examples/20-full-demo/.pids
+coverage*.out
+*.log

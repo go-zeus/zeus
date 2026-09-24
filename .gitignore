@@ -85,3 +85,8 @@ site/resources/_gen/   # Hugo 资源缓存
 
 # —— Go workspace 本地缓存 ——
 go.work.sum
+
+# examples/20-full-demo 构建产物（make build / make k8s-images 输出）
+examples/20-full-demo/bin/
+examples/20-full-demo/logs/
+examples/20-full-demo/.pids/
