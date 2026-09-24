@@ -16,7 +16,6 @@
 package proxy
 
 import (
-	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -113,12 +112,15 @@ func New(opts ...Option) Proxy {
 	return p
 }
 
-// defaultErrorHandler 默认错误处理：502 + 日志
-func defaultErrorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	if err != nil {
-		w.WriteHeader(http.StatusBadGateway)
-		_, _ = w.Write([]byte(fmt.Sprintf("proxy: %v\n", err)))
+// defaultErrorHandler 默认错误处理：502 + 错误体
+// 错误信息原样透传：selector 错误已自带 "proxy: " 上下文前缀，此处不再叠加
+// （曾因双重包装输出 "proxy: proxy: service ... not found"）
+func defaultErrorHandler(w http.ResponseWriter, _ *http.Request, err error) {
+	if err == nil {
+		return
 	}
+	w.WriteHeader(http.StatusBadGateway)
+	_, _ = w.Write([]byte(err.Error() + "\n"))
 }
 
 // proxy 反向代理实现

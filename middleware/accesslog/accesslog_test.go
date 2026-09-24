@@ -93,3 +93,46 @@ func TestHTTPMiddleware_WorksWithRequestID(t *testing.T) {
 		t.Error("request id header should be set")
 	}
 }
+
+// TestStatusRecorder_FlushPassthrough 验证 statusRecorder 透传 http.Flusher：
+// SSE 等流式场景依赖 w.(http.Flusher) 断言，包装层缺失 Flush 会导致
+// 断言失败、流式响应被全量缓冲
+func TestStatusRecorder_FlushPassthrough(t *testing.T) {
+	// httptest.ResponseRecorder 原生实现 http.Flusher
+	inner := httptest.NewRecorder()
+	// 经接口变量断言：与真实使用一致（statusRecorder 作为 http.ResponseWriter 传给下游 handler）
+	var w http.ResponseWriter = &statusRecorder{ResponseWriter: inner, status: 200}
+
+	f, ok := w.(http.Flusher)
+	if !ok {
+		t.Fatal("statusRecorder should implement http.Flusher")
+	}
+
+	w.WriteHeader(200)
+	w.Write([]byte("event: ping\n\n"))
+	f.Flush()
+
+	if inner.Flushed {
+		// ResponseRecorder.Flush() 会置 Flushed=true，验证委托真正触达底层
+	} else {
+		t.Fatal("Flush should delegate to underlying ResponseWriter")
+	}
+}
+
+// TestStatusRecorder_FlushNoopWithoutFlusher 底层 writer 不实现 Flusher 时
+// Flush 应静默 no-op 而非 panic
+func TestStatusRecorder_FlushNoopWithoutFlusher(t *testing.T) {
+	var w http.ResponseWriter = &statusRecorder{ResponseWriter: nonFlusherWriter{}, status: 200}
+	f, ok := w.(http.Flusher)
+	if !ok {
+		t.Fatal("statusRecorder should implement http.Flusher")
+	}
+	f.Flush() // 不应 panic
+}
+
+// nonFlusherWriter 仅实现 Write/WriteHeader 的最小 ResponseWriter（不实现 Flusher）
+type nonFlusherWriter struct{}
+
+func (nonFlusherWriter) Header() http.Header         { return http.Header{} }
+func (nonFlusherWriter) Write(p []byte) (int, error) { return len(p), nil }
+func (nonFlusherWriter) WriteHeader(int)             {}

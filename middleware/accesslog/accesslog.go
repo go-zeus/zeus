@@ -26,6 +26,14 @@ func (r *statusRecorder) WriteHeader(code int) {
 	r.ResponseWriter.WriteHeader(code)
 }
 
+// Flush 实现 http.Flusher，委托底层 ResponseWriter。
+// 缺失会导致代理/ReverseProxy 的 w.(http.Flusher) 断言失败，SSE 流式响应被全量缓冲。
+func (r *statusRecorder) Flush() {
+	if f, ok := r.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // HTTPMiddleware HTTP 风格中间件，记录每个请求
 //
 // 用法：

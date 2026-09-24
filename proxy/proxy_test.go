@@ -127,3 +127,42 @@ func TestServeHTTP_HTTPFallback(t *testing.T) {
 		t.Error("X-Forwarded-For should be injected")
 	}
 }
+
+// errSelector 固定返回错误的 Selector（模拟服务未注册等发现失败）
+type errSelector struct{ err error }
+
+func (s errSelector) Pick(*http.Request) (*url.URL, error) { return nil, s.err }
+
+// TestServeHTTP_SelectorErrorBody 验证 selector 错误透传给客户端时的错误体格式：
+// selector 错误已自带 "proxy: " 前缀，defaultErrorHandler 不得再叠加前缀
+// （回归：曾输出 "proxy: proxy: service \"x\" not found" 双前缀）
+func TestServeHTTP_SelectorErrorBody(t *testing.T) {
+	sel := errSelector{err: errNotFound("srv1")}
+	p := New(WithSelector(sel))
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	p.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status: got %d, want 502", rec.Code)
+	}
+	want := "proxy: service \"srv1\" not found\n"
+	if got := rec.Body.String(); got != want {
+		t.Fatalf("error body: got %q, want %q", got, want)
+	}
+	if strings.HasPrefix(rec.Body.String(), "proxy: proxy:") {
+		t.Fatal("error body should not double the proxy: prefix")
+	}
+}
+
+// errNotFound 构造与 selector 相同格式的错误
+func errNotFound(name string) error {
+	return &notFoundError{name: name}
+}
+
+type notFoundError struct{ name string }
+
+func (e *notFoundError) Error() string {
+	return "proxy: service \"" + e.name + "\" not found"
+}

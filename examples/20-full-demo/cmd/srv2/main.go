@@ -94,16 +94,20 @@ func main() {
 	regClient := gwreg.New(gatewayURL)
 	regCtx, regCancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer regCancel()
-	if err := regClient.Register(regCtx, gwapi.Instance{
+	ins := gwapi.Instance{
 		ID:       instanceID,
 		Name:     "srv2",
 		Cluster:  cluster,
 		Protocol: "http",
 		IP:       srvcfg.LocalIP(),
 		Port:     port,
-	}); err != nil {
+	}
+	if err := regClient.Register(regCtx, ins); err != nil {
 		log.Fatal(fmt.Sprintf("srv2 register failed: %v", err))
 	}
+
+	// 心跳重注册：gateway 重启丢失 memory registry 状态后，下一个周期自动恢复
+	keepStop := regClient.KeepAlive(ins)
 
 	log.Info("srv2[%s] ready on :%d", cluster, port)
 
@@ -112,6 +116,8 @@ func main() {
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-sigCh
 	log.Info("srv2 received signal %v, shutting down...", sig)
+
+	keepStop() // 先停心跳再反注册，避免下个周期把实例又注册回去
 
 	deregCtx, deregCancel := context.WithTimeout(context.Background(), 3*time.Second)
 	regClient.Deregister(deregCtx, instanceID)
