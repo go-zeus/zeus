@@ -132,6 +132,13 @@ func handleRegister(reg registry.Registrar, cache *instanceCache, w http.Respons
 		Port:     ins.Port,
 	}
 	if err := reg.Register(r.Context(), t); err != nil {
+		// 同 ID 重复注册视为幂等成功（心跳语义）：
+		// memory registry 对重复 ID 返回 error，若透传 500 会让 srv 的心跳误判失败
+		if instanceExists(reg, t) {
+			cache.Set(t)
+			json.NewEncoder(w).Encode(gwapi.RegisterResponse{OK: true})
+			return
+		}
 		log.Error("gateway register failed: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -140,6 +147,21 @@ func handleRegister(reg registry.Registrar, cache *instanceCache, w http.Respons
 	log.Info("gateway: instance registered name=%s cluster=%s endpoint=%s:%d",
 		ins.Name, ins.Cluster, ins.IP, ins.Port)
 	json.NewEncoder(w).Encode(gwapi.RegisterResponse{OK: true})
+}
+
+// instanceExists 检查注册中心是否已存在同 ID 实例（用于注册幂等判断）
+// registrar 同时实现 Discovery 时走查询；否则保守返回 false（走错误路径）
+func instanceExists(reg registry.Registrar, ins *types.Instance) bool {
+	dis, ok := reg.(registry.Discovery)
+	if !ok {
+		return false
+	}
+	entry, err := dis.GetService(context.Background(), ins.Name)
+	if err != nil || entry == nil {
+		return false
+	}
+	_, exists := entry.Instances[ins.ID]
+	return exists
 }
 
 // handleDeregister 处理 srv 反注册

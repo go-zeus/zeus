@@ -16,7 +16,7 @@ help:
 	@echo "  make logs-dc       跟踪 docker-compose 日志"
 	@echo ""
 	@echo "K8s："
-	@echo "  make k8s-images    构建所有镜像并 load 到 minikube/kind"
+	@echo "  make k8s-images    构建所有镜像并 load 到 minikube/kind（REGISTRY=xxx:5000 则 push 私有仓库）"
 	@echo "  make k8s-apply     应用所有 manifests"
 	@echo "  make k8s-delete    删除整个 zeus-demo namespace"
 	@echo ""
@@ -125,24 +125,35 @@ logs-dc:
 	docker compose -f $(COMPOSE) logs -f
 
 # === K8s（minikube/kind 场景） ===
-# 注意：imagePullPolicy=Never，需先 load 到集群节点
+# REGISTRY 决定镜像分发方式：
+#   空（默认）  = 本地镜像名 zeus-<svc>:latest + load 到 minikube/kind（imagePullPolicy=Never）
+#   非空       = tag 为 $(REGISTRY)/zeus-<svc>:latest 并 push（私有仓库场景，如 make k8s-images REGISTRY=hub.wang.dd:5000）
+REGISTRY ?=
 k8s-images:
 	@for svc in $(SERVICES) frontend; do \
-		echo "→ building zeus-$$svc..."; \
+		if [ -n "$(REGISTRY)" ]; then name=$(REGISTRY)/zeus-$$svc:latest; else name=zeus-$$svc:latest; fi; \
+		echo "→ building $$name..."; \
 		if [ "$$svc" = "frontend" ]; then \
-			docker build -t zeus-$$svc -f docker/frontend.Dockerfile $(ROOT); \
+			docker build -t $$name -f docker/frontend.Dockerfile $(ROOT); \
 		else \
-			docker build -t zeus-$$svc -f $(DOCKERFILE) --build-arg SVC=$$svc $(ROOT); \
+			docker build -t $$name -f $(DOCKERFILE) --build-arg SVC=$$svc $(ROOT); \
 		fi; \
 	done
 	@echo ""
-	@echo "→ loading images into cluster..."
-	@command -v minikube >/dev/null && for svc in $(SERVICES) frontend; do \
-		minikube image load zeus-$$svc:latest; \
-	done || echo "(skip minikube load: minikube not found)"
-	@command -v kind >/dev/null && for svc in $(SERVICES) frontend; do \
-		kind load docker-image zeus-$$svc:latest; \
-	done || echo "(skip kind load: kind not found)"
+	@if [ -n "$(REGISTRY)" ]; then \
+		echo "→ pushing images to $(REGISTRY)..."; \
+		for svc in $(SERVICES) frontend; do \
+			docker push $(REGISTRY)/zeus-$$svc:latest; \
+		done; \
+	else \
+		echo "→ loading images into cluster..."; \
+		command -v minikube >/dev/null && for svc in $(SERVICES) frontend; do \
+			minikube image load zeus-$$svc:latest; \
+		done || echo "(skip minikube load: minikube not found)"; \
+		command -v kind >/dev/null && for svc in $(SERVICES) frontend; do \
+			kind load docker-image zeus-$$svc:latest; \
+		done || echo "(skip kind load: kind not found)"; \
+	fi
 
 k8s-apply:
 	kubectl apply -f deploy/k8s/

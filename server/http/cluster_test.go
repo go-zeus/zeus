@@ -186,7 +186,9 @@ func TestHTTPServer_Start_InjectsCluster(t *testing.T) {
 	})
 
 	// 动态端口避免与开发环境常用端口冲突
-	srv := NewHTTP(Mux(mux), Port(freePort(t))).(*httpServer)
+	// 显式绑定 127.0.0.1：缺省 IP 时 Endpoint 为 ":port"，请求 URL "http://:port"
+	// 不会命中 NO_PROXY 的 localhost 豁免，设置系统代理的环境下请求会被代理劫持
+	srv := NewHTTP(Mux(mux), IP("127.0.0.1"), Port(freePort(t))).(*httpServer)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
