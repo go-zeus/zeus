@@ -7,7 +7,9 @@
 package accesslog
 
 import (
+	"bufio"
 	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -32,6 +34,18 @@ func (r *statusRecorder) Flush() {
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}
+}
+
+// Hijack 实现 http.Hijacker，委托底层 ResponseWriter。
+// 缺失会导致代理的 w.(http.Hijacker) 断言失败，WebSocket 升级被拒
+//（proxy: hijack not supported）。hijack 后响应不经 WriteHeader，
+// statusRecorder 对该请求记初始值 200。
+func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := r.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("accesslog: inner ResponseWriter %T does not implement http.Hijacker", r.ResponseWriter)
+	}
+	return hj.Hijack()
 }
 
 // HTTPMiddleware HTTP 风格中间件，记录每个请求
